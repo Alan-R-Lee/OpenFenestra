@@ -1,0 +1,10 @@
+.tools/
+.research/
+**/bin/
+**/obj/
+artifacts/
+.vs/
+*.user
+*.suo
+*.log
+.qa/

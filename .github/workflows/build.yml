@@ -1,0 +1,31 @@
+name: Windows build and tests
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build with warnings as errors
+        run: dotnet build OpenFenestra.sln -c Release
+      - name: Core regression tests
+        run: dotnet run --project tests/OpenFenestra.Tests -c Release --no-build
+      # UI smoke tests require an interactive Windows desktop; run scripts/test.ps1 locally.
+      - name: Publish portable Windows build
+        shell: pwsh
+        run: ./scripts/build.ps1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: OpenFenestra-win-x64
+          path: |
+            artifacts/OpenFenestra-win-x64.zip
+            artifacts/OpenFenestra-win-x64.sha256
+          if-no-files-found: error
