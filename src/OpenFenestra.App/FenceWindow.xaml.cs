@@ -2,16 +2,19 @@ using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using OpenFenestra.Core;
 
 namespace OpenFenestra.App;
 
-internal sealed class EntryView(DesktopEntry entry) : INotifyPropertyChanged
+internal sealed class EntryView(DesktopEntry entry, int iconSize = 48) : INotifyPropertyChanged
 {
     public string Path => entry.Path;
     public string Name => entry.Name;
     public double ItemOpacity => entry.Exists ? 1 : 0.45;
+    public int IconSize => iconSize;
+    public int TileHeight => iconSize + 55;
     private ImageSource? _icon;
     public ImageSource? Icon { get => _icon; set { _icon = value; PropertyChanged?.Invoke(this, new(nameof(Icon))); } }
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -27,22 +30,40 @@ public partial class FenceWindow : Window
     private bool _ready, _closing;
     private Point _dragStart;
     private int _generation;
+    private bool _headerArmed, _searchVisible;
+    private Point _headerStart;
+    private DateTime _expandedAt;
+    private HwndSource? _hwndSource;
 
     internal FenceWindow(WorkspaceController workspace, FenceGroup model)
     {
         _workspace = workspace; Model = model;
         InitializeComponent();
+        ShowInTaskbar = App.DebugWindows;
+        SourceInitialized += (_, _) =>
+        {
+            _hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+            _hwndSource?.AddHook(OnNativeMessage);
+        };
         _refresh.Tick += (_, _) => { _refresh.Stop(); RefreshItems(); };
         Loaded += (_, _) =>
         {
-            ClampToScreens(); _ready = true;
-            if (_workspace.Layout.PinToDesktop) NativeDesktop.Anchor(this);
+            ClampToScreens(); _ready = true; RefreshItems();
+            _workspace.ApplyDesktopZOrder();
         };
         LocationChanged += (_, _) => { if (_ready) { Model.X = Left; Model.Y = Top; _workspace.ScheduleSave(); } };
-        Deactivated += (_, _) => { if (_workspace.Layout.PinToDesktop && !Topmost) NativeDesktop.Anchor(this); };
+        Deactivated += (_, _) => { if (!Topmost) _workspace.ApplyDesktopZOrder(); };
         Closing += (_, e) => { if (!_closing && !_workspace.Exiting) { e.Cancel = true; Model.Visible = false; _workspace.Notify(); } };
         Search.Text = "";
         Refresh();
+    }
+
+    private nint OnNativeMessage(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
+    {
+        // A child visual's routed DpiChanged must never rebuild its own item tree.
+        // Only the top-level HWND's monitor transition needs a fresh icon resolution.
+        if (message == 0x02E0) Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(RefreshItems));
+        return 0;
     }
 
     internal void Refresh()
@@ -50,20 +71,25 @@ public partial class FenceWindow : Window
         Title = "OpenFenestra · " + Model.Name;
         GroupTitle.Text = Model.Name;
         Accent.Background = Brush(Model.Color);
-        var color = (Color)ColorConverter.ConvertFromString("#1F302C");
-        Surface.Background = new SolidColorBrush(Color.FromArgb((byte)(Model.Opacity * 255), color.R, color.G, color.B));
+        var color = (Color)ColorConverter.ConvertFromString("#151C22");
+        Surface.Background = new SolidColorBrush(Color.FromArgb((byte)((Model.Collapsed ? Model.CollapsedOpacity : Model.Opacity) * 255), color.R, color.G, color.B));
         Left = Model.X; Top = Model.Y; Width = Model.Width;
-        MinHeight = Model.Collapsed ? 48 : 180;
-        Height = Model.Collapsed ? 48 : Model.Height;
-        foreach (var element in new UIElement[] { TabBar, SearchArea, ContentArea, Footnote, ResizeGrip })
-            element.Visibility = Model.Collapsed ? Visibility.Collapsed : Visibility.Visible;
+        var target = Model.Collapsed ? 34 : Model.Height;
+        MinHeight = Model.Collapsed ? 34 : 180;
+        BeginAnimation(HeightProperty, null); Height = target;
+        var opacity = Model.Collapsed ? 0.68 : 1;
+        BeginAnimation(OpacityProperty, null); Opacity = opacity;
+        TabBar.Visibility = !Model.Collapsed && Model.Tabs.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        SearchArea.Visibility = !Model.Collapsed && _searchVisible ? Visibility.Visible : Visibility.Collapsed;
+        ContentArea.Visibility = ResizeGrip.Visibility = Model.Collapsed ? Visibility.Collapsed : Visibility.Visible;
+        CollapseButton.Content = Model.Collapsed ? "+" : "−";
         ResizeGrip.IsEnabled = !Model.Locked;
         Header.Cursor = Model.Locked ? Cursors.Arrow : Cursors.SizeAll;
         Tabs.Children.Clear();
         foreach (var tab in Model.Tabs)
         {
             var button = new Button { Content = tab.Name, Padding = new Thickness(10, 5, 10, 5), Margin = new Thickness(0, 0, 5, 0),
-                Foreground = Brushes.White, Background = tab.Id == Model.ActiveTab.Id ? Brush(Model.Color, 0.5) : Brush("#FFFFFF", 0.06) };
+                FontSize = 11, Foreground = Brushes.White, Background = tab.Id == Model.ActiveTab.Id ? Brush(Model.Color, 0.32) : Brush("#FFFFFF", 0.04) };
             button.Click += (_, _) => { Model.SelectedTabId = tab.Id; Search.Text = ""; _workspace.Notify(); };
             button.ContextMenu = new ContextMenu();
             AddMenu(button.ContextMenu, "编辑标签页", () => EditTab(tab));
@@ -113,7 +139,7 @@ public partial class FenceWindow : Window
         var tab = Model.ActiveTab;
         var search = Search.Text.Trim();
         var entries = FileCatalog.ReadTab(tab).Where(e => e.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase)).ToList();
-        var views = entries.Take(300).Select(e => new EntryView(e)).ToArray();
+        var views = entries.Take(300).Select(e => new EntryView(e, Model.IconSize)).ToArray();
         Items.ItemsSource = views;
         Empty.Text = tab.IsPortal && !Directory.Exists(tab.FolderPath) ? "文件夹暂不可用\n请检查路径或网络连接" : search.Length > 0 ? "没有匹配的项目" : tab.IsPortal ? "这个文件夹还没有项目" : "把文件、文件夹或快捷方式拖到这里\n从这里开始整理桌面";
         Empty.Visibility = views.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -122,7 +148,8 @@ public partial class FenceWindow : Window
         {
             foreach (var view in views)
             {
-                var icon = await Task.Run(() => ShellFiles.Icon(view.Path));
+                var pixels = Math.Clamp((int)Math.Ceiling(Model.IconSize * VisualTreeHelper.GetDpi(this).DpiScaleX * 2), 96, 256);
+                var icon = await Task.Run(() => ShellFiles.Icon(view.Path, pixels));
                 if (generation != _generation || _closing) return;
                 view.Icon = icon;
             }
@@ -132,16 +159,41 @@ public partial class FenceWindow : Window
     private void OnSearchChanged(object sender, TextChangedEventArgs e) { if (Items is not null) RefreshItems(); }
     private void OnHeaderDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ClickCount == 2) { ToggleCollapse(); return; }
-        if (Model.Locked) return;
-        try { DragMove(); } catch (InvalidOperationException) { /* button was released before the drag started */ }
+        if (HandleHeaderClick(e.ClickCount)) { e.Handled = true; return; }
+        _headerStart = e.GetPosition(this); _headerArmed = !Model.Locked;
+        if (_headerArmed) Header.CaptureMouse();
+    }
+    internal bool HandleHeaderClick(int clickCount)
+    {
+        if (Model.Collapsed) { _expandedAt = DateTime.UtcNow; SetCollapsed(false); return true; }
+        if (clickCount == 2)
+        {
+            if ((DateTime.UtcNow - _expandedAt).TotalMilliseconds > System.Windows.Forms.SystemInformation.DoubleClickTime) SetCollapsed(true);
+            _headerArmed = false; Header.ReleaseMouseCapture(); return true;
+        }
+        return false;
+    }
+    private void OnHeaderMove(object sender, MouseEventArgs e)
+    {
+        var point = e.GetPosition(this);
+        if (!_headerArmed || e.LeftButton != MouseButtonState.Pressed || Math.Abs(point.X - _headerStart.X) + Math.Abs(point.Y - _headerStart.Y) < 10) return;
+        _headerArmed = false; Header.ReleaseMouseCapture();
+        try { DragMove(); } catch (InvalidOperationException) { }
         Model.X = Left; Model.Y = Top; _workspace.ScheduleSave();
     }
+    private void OnHeaderUp(object sender, MouseButtonEventArgs e) { _headerArmed = false; Header.ReleaseMouseCapture(); }
+    private void OnSearchToggle(object sender, RoutedEventArgs e)
+    {
+        _searchVisible = !_searchVisible; SearchArea.Visibility = _searchVisible ? Visibility.Visible : Visibility.Collapsed;
+        if (_searchVisible) Search.Focus(); else Search.Text = "";
+    }
     private void OnCollapse(object sender, RoutedEventArgs e) => ToggleCollapse();
-    private void ToggleCollapse() { Model.Collapsed = !Model.Collapsed; _workspace.Notify(); }
+    private void ToggleCollapse() => SetCollapsed(!Model.Collapsed);
+    internal void SetCollapsed(bool collapsed) { Model.Collapsed = collapsed; _workspace.Notify(); }
     private void OnResize(object sender, DragDeltaEventArgs e)
     {
         if (Model.Locked || Model.Collapsed) return;
+        BeginAnimation(HeightProperty, null);
         Width = Math.Clamp(Width + e.HorizontalChange, 260, 2000);
         Height = Math.Clamp(Height + e.VerticalChange, 180, 2000);
         Model.Width = Width; Model.Height = Height; _workspace.ScheduleSave();
@@ -150,7 +202,8 @@ public partial class FenceWindow : Window
     {
         var menu = new ContextMenu();
         AddMenu(menu, "编辑分组", () => EditGroup());
-        AddMenu(menu, "添加文件引用…", AddFiles);
+        AddMenu(menu, "收纳文件或快捷方式…", AddFiles);
+        AddMenu(menu, "添加标签页", () => OnAddTab(this, new RoutedEventArgs()));
         AddMenu(menu, "编辑当前标签页 / 映射文件夹", () => EditTab(Model.ActiveTab));
         AddMenu(menu, Model.Locked ? "解锁位置与大小" : "锁定位置与大小", () => { Model.Locked = !Model.Locked; _workspace.Notify(); });
         AddMenu(menu, "刷新", () => { ConfigureWatcher(); RefreshItems(); });
@@ -179,20 +232,21 @@ public partial class FenceWindow : Window
     {
         if (Model.ActiveTab.IsPortal) { MessageBox.Show(this, "文件夹映射展示文件夹的实时内容。请切换普通标签页添加引用。", "OpenFenestra"); return; }
         var dialog = new Microsoft.Win32.OpenFileDialog { Multiselect = true, Title = "添加文件引用（原文件保留在原位置）" };
-        if (dialog.ShowDialog(this) == true) { FileCatalog.AddReferences(Model.ActiveTab, dialog.FileNames); _workspace.Notify(); }
+        if (dialog.ShowDialog(this) == true) _workspace.Collect(Model.ActiveTab, dialog.FileNames);
     }
     private void OnDragOver(object sender, DragEventArgs e)
     {
-        e.Effects = !Model.ActiveTab.IsPortal && e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Link : DragDropEffects.None;
+        e.Effects = !Model.ActiveTab.IsPortal && DesktopDrag.Read(e.Data).Length > 0 ? DragDropEffects.Link : DragDropEffects.None;
         e.Handled = true;
     }
     private void OnDrop(object sender, DragEventArgs e)
     {
         e.Handled = true;
-        if (Model.ActiveTab.IsPortal || e.Data.GetData(DataFormats.FileDrop) is not string[] files) return;
-        var added = FileCatalog.AddReferences(Model.ActiveTab, files);
+        if (Model.ActiveTab.IsPortal) return;
+        var files = DesktopDrag.Read(e.Data);
+        if (files.Length == 0) return;
         e.Effects = DragDropEffects.Link;
-        _workspace.Notify($"已添加 {added} 个文件引用");
+        _workspace.Collect(Model.ActiveTab, files);
     }
     private void OnOpen(object sender, MouseButtonEventArgs e) => OpenSelected();
     private void OpenSelected()
@@ -205,7 +259,7 @@ public partial class FenceWindow : Window
     {
         if (e.Key == Key.Enter) { OpenSelected(); e.Handled = true; }
         if (e.Key == Key.Delete && !Model.ActiveTab.IsPortal && Items.SelectedItem is EntryView item)
-        { Model.ActiveTab.Items.Remove(item.Path); _workspace.Notify("已移除引用 · 原文件保留"); e.Handled = true; }
+        { ReturnItem(item.Path); e.Handled = true; }
     }
     private void OnItemContext(object sender, ContextMenuEventArgs e)
     {
@@ -223,15 +277,12 @@ public partial class FenceWindow : Window
                     var target = new MenuItem { Header = group.Name + " / " + tab.Name };
                     target.Click += (_, _) =>
                     {
-                        FileCatalog.AddReferences(tab, [item.Path]);
-                        // Keep the source when a missing file cannot be added to the destination.
-                        if (tab.Items.Contains(item.Path, StringComparer.OrdinalIgnoreCase)) Model.ActiveTab.Items.Remove(item.Path);
-                        _workspace.Notify();
+                        _workspace.Collect(tab, [item.Path]);
                     };
                     move.Items.Add(target);
                 }
             menu.Items.Add(move);
-            AddMenu(menu, "移除引用（保留原文件）", () => { Model.ActiveTab.Items.Remove(item.Path); _workspace.Notify(); });
+            AddMenu(menu, "放回桌面（保留原文件）", () => ReturnItem(item.Path));
         }
         container.ContextMenu = menu;
         menu.PlacementTarget = container;
@@ -244,9 +295,15 @@ public partial class FenceWindow : Window
         var point = e.GetPosition(Items);
         if (e.LeftButton != MouseButtonState.Pressed || Items.SelectedItem is not EntryView item
             || Math.Abs(point.X - _dragStart.X) + Math.Abs(point.Y - _dragStart.Y) < 12) return;
-        DragDrop.DoDragDrop(Items, new DataObject(DataFormats.FileDrop, new[] { item.Path }), DragDropEffects.Link | DragDropEffects.Copy);
+        var paths = Items.SelectedItems.Cast<EntryView>().Select(v => v.Path).ToArray();
+        _workspace.DragItems(Items, paths.Length > 0 ? paths : [item.Path]);
     }
-    internal void DisposePanel() { _closing = true; _generation++; _refresh.Stop(); _watcher?.Dispose(); Close(); }
+    private void ReturnItem(string path)
+    {
+        var point = PointToScreen(new Point(Width + 20, 50));
+        _workspace.ReturnToDesktop([path], new(point.X, point.Y));
+    }
+    internal void DisposePanel() { _closing = true; _generation++; _refresh.Stop(); _watcher?.Dispose(); _hwndSource?.RemoveHook(OnNativeMessage); Close(); }
     internal static SolidColorBrush Brush(string hex, double opacity = 1) => new((Color)ColorConverter.ConvertFromString(hex)) { Opacity = opacity };
     private static void AddMenu(ContextMenu menu, string title, Action action)
     { var item = new MenuItem { Header = title }; item.Click += (_, _) => action(); menu.Items.Add(item); }

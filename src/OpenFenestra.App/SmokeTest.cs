@@ -6,10 +6,15 @@ namespace OpenFenestra.App;
 
 internal static class SmokeTest
 {
+    private static string? _tracePath;
+    private static void Trace(string text) { if (_tracePath is not null) File.AppendAllText(_tracePath, DateTimeOffset.Now + " " + text + Environment.NewLine); }
     internal static async void Run(WorkspaceController workspace)
     {
         var checks = new List<string>();
         var exitCode = 0;
+        Directory.CreateDirectory(workspace.Store.DirectoryPath);
+        _tracePath = Path.Combine(workspace.Store.DirectoryPath, "smoke-progress.log");
+        Trace("begin");
         try
         {
             if (workspace.Layout.Groups.Count > 0) throw new InvalidOperationException("请为测试提供一个空的数据目录。");
@@ -21,16 +26,24 @@ internal static class SmokeTest
             File.WriteAllText(Path.Combine(samples, "项目草稿.md"), "# 项目草稿\n桌面，自有条理。");
             var group = new FenceGroup { Name = "我的工作台", X = 90, Y = 90, Width = 350, Height = 370 };
             FileCatalog.AddReferences(group.ActiveTab, Directory.GetFileSystemEntries(samples));
-            workspace.AddGroup(group);
+            FileCatalog.AddReferences(group.ActiveTab, [Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe")]);
+            Trace("before add group"); workspace.AddGroup(group); Trace("after add group");
             await Task.Delay(600);
-            var panel = workspace.Panels.Single();
+            Trace("after first delay"); var panel = workspace.Panels.Single();
             Check(panel.IsVisible, "面板窗口创建与显示", checks);
-            Check(((ListBox)panel.FindName("Items")).Items.Count == 3, "引用图标列表渲染", checks);
+            Check(((ListBox)panel.FindName("Items")).Items.Count == 4, "引用图标列表渲染", checks);
             Check(File.Exists(note), "添加引用保留原文件", checks);
-            group.Collapsed = true; workspace.Notify();
-            Check(panel.Height == 48, "折叠标题栏", checks);
-            group.Collapsed = false; workspace.Notify();
-            Check(panel.Height == 370, "展开恢复高度", checks);
+            panel.HandleHeaderClick(2); await Task.Delay(220);
+            Trace($"folded: model={group.Collapsed}, height={panel.Height}, actual={panel.ActualHeight}");
+            Check(group.Collapsed && Math.Abs(panel.Height - 34) < 1, "折叠标题栏", checks);
+            Check(panel.Opacity < 1 && ((SolidColorBrush)((Border)panel.FindName("Surface")).Background).Color.A < group.Opacity * 255, "折叠后提高透明度", checks);
+            panel.HandleHeaderClick(1); await Task.Delay(220);
+            Check(!group.Collapsed && Math.Abs(panel.Height - 370) < 1, "展开恢复高度", checks);
+            Check(Math.Abs(panel.Opacity - 1) < 0.01, "单击展开状态恢复透明度", checks);
+            Trace("before high-resolution extraction");
+            var shellIcon = await Task.Run(() => ShellFiles.Icon(Environment.GetFolderPath(Environment.SpecialFolder.Windows) + @"\explorer.exe", 128)).WaitAsync(TimeSpan.FromSeconds(8));
+            Trace("after high-resolution extraction");
+            Check(shellIcon is System.Windows.Media.Imaging.BitmapSource { PixelWidth: >= 96 }, "高分辨率 Shell 图标提取", checks);
             var portal = new FenceTab { Name = "灵感资料", FolderPath = folder };
             group.Tabs.Add(portal); group.SelectedTabId = portal.Id; workspace.Notify();
             Check(((StackPanel)panel.FindName("Tabs")).Children.Count == 2, "标签页切换", checks);
@@ -49,6 +62,16 @@ internal static class SmokeTest
             Check(workspace.Layout.Groups.Single().Name == "我的工作台", "快照恢复", checks);
             Check(workspace.Store.Snapshots().Count >= 2, "恢复前自动快照", checks);
             await Task.Delay(500);
+            var restoredPanel = workspace.Panels.Single();
+            workspace.Manager.Hide(); restoredPanel.Topmost = true; restoredPanel.Activate();
+            await Task.Delay(500); restoredPanel.UpdateLayout();
+            var renderedItems = (ListBox)restoredPanel.FindName("Items");
+            var area = (Grid)restoredPanel.FindName("ContentArea");
+            Trace($"render: items={renderedItems.Items.Count}, visible={renderedItems.IsVisible}, size={renderedItems.ActualWidth}x{renderedItems.ActualHeight}, area={area.Visibility}/{area.ActualHeight}, collapsed={restoredPanel.Model.Collapsed}, tab={restoredPanel.Model.ActiveTab.Name}, container={renderedItems.ItemContainerGenerator.Status}");
+            DumpVisual(renderedItems, 0);
+            Capture(restoredPanel, Path.Combine(workspace.Store.DirectoryPath, "panel-preview.png"));
+            Check(renderedItems.ItemContainerGenerator.ContainerFromIndex(0) is ListBoxItem { ActualHeight: > 50 }, "图标项目实际布局", checks);
+            workspace.Manager.Show();
             Capture(workspace.Manager, Path.Combine(workspace.Store.DirectoryPath, "manager-preview.png"));
             Capture(workspace.Panels.Single(), Path.Combine(workspace.Store.DirectoryPath, "panel-preview.png"));
         }
@@ -61,14 +84,22 @@ internal static class SmokeTest
         }
     }
     private static void Check(bool condition, string label, List<string> results)
-    { if (!condition) throw new InvalidOperationException(label); results.Add("PASS: " + label); }
+    { if (!condition) throw new InvalidOperationException(label); results.Add("PASS: " + label); Trace("PASS: " + label); }
     private static void Capture(Window window, string path)
     {
         var content = (FrameworkElement)window.Content;
+        content.UpdateLayout();
         var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap((int)Math.Ceiling(content.ActualWidth), (int)Math.Ceiling(content.ActualHeight), 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(content);
         var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
         encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
         using var output = File.Create(path); encoder.Save(output);
+    }
+    private static void DumpVisual(DependencyObject value, int depth)
+    {
+        if (depth > 10) return;
+        if (value is FrameworkElement element)
+            Trace(new string(' ', depth) + element.GetType().Name + $" {element.ActualWidth}x{element.ActualHeight} desired={element.DesiredSize} visible={element.Visibility} data={element.DataContext?.GetType().Name}");
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(value); i++) DumpVisual(VisualTreeHelper.GetChild(value, i), depth + 1);
     }
 }

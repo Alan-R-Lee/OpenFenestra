@@ -32,6 +32,8 @@ public partial class MainWindow : Window
             EmptyState.Visibility = groups.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             PinSetting.IsChecked = _workspace.Layout.PinToDesktop;
             AutoSetting.IsChecked = _workspace.Layout.AutoOrganize;
+            DesktopSetting.IsChecked = _workspace.Layout.DesktopIntegrationEnabled;
+            StartupSetting.IsChecked = StartupRegistration.IsEnabled();
             StatusText.Text = _workspace.Status;
             SnapshotList.ItemsSource = _workspace.Store.Snapshots().Select(p => new SnapshotCard(p, Path.GetFileNameWithoutExtension(p))).ToList();
         }
@@ -71,6 +73,10 @@ public partial class MainWindow : Window
     private void OnSearch(object sender, TextChangedEventArgs e) { if (GroupCards is not null) Render(); }
     private void OnSettings(object sender, RoutedEventArgs e)
     { if (!_rendering) _workspace.UpdateSettings(PinSetting.IsChecked == true, AutoSetting.IsChecked == true); }
+    private void OnDesktopSetting(object sender, RoutedEventArgs e)
+    { if (!_rendering) _workspace.SetDesktopIntegration(DesktopSetting.IsChecked == true); }
+    private void OnStartupSetting(object sender, RoutedEventArgs e)
+    { if (!_rendering) _workspace.SetStartup(StartupSetting.IsChecked == true); }
     private void OnSnapshot(object sender, RoutedEventArgs e)
     { _workspace.Store.Snapshot(_workspace.Layout); _workspace.Notify("当前布局已保存为快照"); }
     private void OnExport(object sender, RoutedEventArgs e)

@@ -80,6 +80,8 @@
 
 ## 后续研究顺序
 
+v0.2 已增加自有桌面显示层和排他归属：临时隐藏原生图标列表，保留未收纳图标的可拖拽显示，并在退出或崩溃后恢复。没有移植 Stardock 的实现。高清图标依据微软的 [IShellItemImageFactory](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nn-shobjidl_core-ishellitemimagefactory) 和 [GetImage](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ishellitemimagefactory-getimage)；拖拽依据 [WPF Drag and Drop](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/advanced/drag-and-drop-overview)，窗口可见性依据 [ShowWindow](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-showwindow)。
+
 1. Windows 10/11 不同 Explorer 版本、多显示器与混合 DPI 的桌面层兼容性。
 2. 真正的桌面图标托管或可恢复整理：先完成位置备份与故障回退，再涉及原生桌面数据。
 3. 可配置分类规则、图标排序与拖动重排。
