@@ -40,6 +40,8 @@
 
 普通模式用当前用户 LocalApplicationData，`--portable` 或 `portable.mode` 使用 EXE 旁的 `data` 目录；`--data-dir` 优先级最高。没有开发电脑盘符或用户名依赖。
 
+发布 ZIP 和可选安装脚本只复制明确列出的程序、文档和许可证，不打包或复制输出目录中已有的便携用户数据及 portable.mode 标记。
+
 500 ms 防抖保存，正常退出立即保存。同目录临时文件 Flush 后原子替换，保留上一版 `.bak`。快照包含布局，不包含文件内容。损坏主文件可从备份恢复，原损坏文件另存。
 
 可选自启动使用 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\OpenFenestra`，命令保留 `--tray` 和便携/自定义数据目录参数。其他电脑默认不启用。用户可在管理窗口关闭该项。
