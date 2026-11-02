@@ -33,15 +33,28 @@ internal static class SmokeTest
             Check(panel.IsVisible, "面板窗口创建与显示", checks);
             Check(((ListBox)panel.FindName("Items")).Items.Count == 4, "引用图标列表渲染", checks);
             Check(File.Exists(note), "添加引用保留原文件", checks);
+            var tabBar = (DockPanel)panel.FindName("TabBar");
+            var addTab = (Button)panel.FindName("AddTabButton");
+            Check(group.Tabs.Count == 1 && tabBar.IsVisible && addTab.IsVisible && addTab.IsEnabled,
+                "单标签页仍显示可用的添加按钮", checks);
+            var startupXml = System.Xml.Linq.XElement.Parse(StartupRegistration.BuildTaskXml(@"C:\测试 & tools\OpenFenestra.exe", "--tray --portable", "S-1-5-21-123"));
+            System.Xml.Linq.XNamespace ns = startupXml.Name.Namespace;
+            Check(startupXml.Descendants(ns + "Command").Single().Value == @"C:\测试 & tools\OpenFenestra.exe"
+                && !startupXml.Descendants(ns + "Delay").Any()
+                && startupXml.Descendants(ns + "LogonType").Single().Value == "InteractiveToken"
+                && startupXml.Descendants(ns + "ExecutionTimeLimit").Single().Value == "PT0S",
+                "登录任务无延迟、交互会话、无超时且安全保存路径", checks);
             group.X = 440; group.Y = 180; workspace.Notify();
             Check(panel.Left == 440 && panel.Top == 180 && group.X == 440 && group.Y == 180,
                 "同时更新横纵位置不被窗口事件覆盖", checks);
             panel.HandleHeaderClick(2); await Task.Delay(220);
             Trace($"folded: model={group.Collapsed}, height={panel.Height}, actual={panel.ActualHeight}");
             Check(group.Collapsed && Math.Abs(panel.Height - 34) < 1, "折叠标题栏", checks);
+            Check(!tabBar.IsVisible, "折叠时隐藏标签栏", checks);
             Check(panel.Opacity < 1 && ((SolidColorBrush)((Border)panel.FindName("Surface")).Background).Color.A < group.Opacity * 255, "折叠后提高透明度", checks);
             panel.HandleHeaderClick(1); await Task.Delay(220);
             Check(!group.Collapsed && Math.Abs(panel.Height - 370) < 1, "展开恢复高度", checks);
+            Check(addTab.IsVisible, "展开后恢复添加标签页按钮", checks);
             Check(Math.Abs(panel.Opacity - 1) < 0.01, "单击展开状态恢复透明度", checks);
             Trace("before high-resolution extraction");
             var shellIcon = await Task.Run(() => ShellFiles.Icon(Environment.GetFolderPath(Environment.SpecialFolder.Windows) + @"\explorer.exe", 128)).WaitAsync(TimeSpan.FromSeconds(8));
@@ -50,6 +63,7 @@ internal static class SmokeTest
             var portal = new FenceTab { Name = "灵感资料", FolderPath = folder };
             group.Tabs.Add(portal); group.SelectedTabId = portal.Id; workspace.Notify();
             Check(((StackPanel)panel.FindName("Tabs")).Children.Count == 2, "标签页切换", checks);
+            Check(addTab.IsVisible, "多标签页仍保留添加按钮", checks);
             File.WriteAllText(Path.Combine(folder, "实时更新.md"), "folder watcher fixture");
             await Task.Delay(1500);
             Check(((ListBox)panel.FindName("Items")).Items.Count == 1, "FileSystemWatcher 实时刷新", checks);

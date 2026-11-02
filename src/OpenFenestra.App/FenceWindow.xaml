@@ -10,7 +10,7 @@
           <Button Grid.Column="4" Content="···" Padding="3" Margin="0" Background="Transparent" Foreground="White" ToolTip="分栏菜单" Click="OnMenu"/>
         </Grid>
       </Border>
-      <DockPanel x:Name="TabBar" Grid.Row="1" Margin="7,4,5,1"><Button DockPanel.Dock="Right" Content="+" Padding="7,2" Margin="2,0,0,0" Background="#12FFFFFF" Foreground="#CFFFFFFF" ToolTip="添加标签页" Click="OnAddTab"/><ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="Tabs" Orientation="Horizontal"/></ScrollViewer></DockPanel>
+      <DockPanel x:Name="TabBar" Grid.Row="1" Margin="7,4,5,1"><Button x:Name="AddTabButton" DockPanel.Dock="Right" Content="+" Padding="7,2" Margin="2,0,0,0" Background="#12FFFFFF" Foreground="#CFFFFFFF" ToolTip="添加标签页" Click="OnAddTab"/><ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="Tabs" Orientation="Horizontal"/></ScrollViewer></DockPanel>
       <Grid x:Name="SearchArea" Grid.Row="2" Margin="8,4,8,5" Visibility="Collapsed"><TextBox x:Name="Search" Background="#1CFFFFFF" Foreground="White" CaretBrush="White" BorderThickness="0" Padding="8,4" ToolTip="搜索当前标签页" TextChanged="OnSearchChanged"/></Grid>
       <Grid x:Name="ContentArea" Grid.Row="3" Margin="5,4,5,0">
         <ListBox x:Name="Items" SelectionMode="Extended" Background="Transparent" BorderThickness="0" Foreground="White" ScrollViewer.HorizontalScrollBarVisibility="Disabled" MouseDoubleClick="OnOpen" PreviewMouseLeftButtonDown="OnItemMouseDown" PreviewMouseMove="OnItemMouseMove" KeyDown="OnItemKeyDown">

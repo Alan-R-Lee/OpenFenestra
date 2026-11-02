@@ -81,7 +81,7 @@ public partial class FenceWindow : Window
         BeginAnimation(HeightProperty, null); Height = target;
         var opacity = Model.Collapsed ? 0.68 : 1;
         BeginAnimation(OpacityProperty, null); Opacity = opacity;
-        TabBar.Visibility = !Model.Collapsed && Model.Tabs.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        TabBar.Visibility = Model.Collapsed ? Visibility.Collapsed : Visibility.Visible;
         SearchArea.Visibility = !Model.Collapsed && _searchVisible ? Visibility.Visible : Visibility.Collapsed;
         ContentArea.Visibility = ResizeGrip.Visibility = Model.Collapsed ? Visibility.Collapsed : Visibility.Visible;
         CollapseButton.Content = Model.Collapsed ? "+" : "−";
@@ -136,7 +136,8 @@ public partial class FenceWindow : Window
 
     private async void RefreshItems()
     {
-        if (!_ready && Items is null) return;
+        // Populate after Loaded, avoiding duplicate Shell icon work during construction.
+        if (!_ready || _closing) return;
         var generation = ++_generation;
         var tab = Model.ActiveTab;
         var search = Search.Text.Trim();

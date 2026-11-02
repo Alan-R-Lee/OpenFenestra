@@ -71,10 +71,21 @@ internal sealed class WorkspaceController : IDisposable
         if (!NativeDesktop.RegisterHotKey(hwnd, 7, 0x0001 | 0x0002 | 0x4000, 0x20))
             Status = "Ctrl+Alt+Space 已被其他程序占用，可通过托盘使用速览。";
         if (Store.RecoveredFromBackup) Status = "已从备份恢复布局；损坏的原文件已单独保留。";
-        try { _ = ShellFiles.DesktopItems(); } catch (Exception error) { Report(error); }
-        SyncPanels(); ConfigureAutoOrganize(); ConfigureDesktopIntegration(); _anchor.Start();
-        // Only a previously enabled user preference repairs a relocated startup command.
-        if (Layout.StartWithWindows) StartupRegistration.SetEnabled(true);
+        SyncPanels();
+        // Render the saved layout before Shell enumeration/bridge setup or registration.
+        // Explorer may still be creating its desktop when a logon task starts us.
+        Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            if (_disposed) return;
+            try { _ = ShellFiles.DesktopItems(); } catch (Exception error) { Report(error); }
+            ConfigureAutoOrganize(); ConfigureDesktopIntegration(retryOnFailure: true); _anchor.Start();
+            if (Layout.StartWithWindows)
+            {
+                try { StartupRegistration.SetEnabled(true); }
+                catch (Exception error) { Report(error); }
+            }
+            SaveNow();
+        }));
         if (showManager) ShowManager();
     }
 
@@ -143,14 +154,21 @@ internal sealed class WorkspaceController : IDisposable
     internal void SetStartup(bool enabled)
     {
         StartupRegistration.SetEnabled(enabled); Layout.StartWithWindows = enabled;
-        Notify(enabled ? "已开启登录 Windows 后自动运行，并恢复上次布局" : "已关闭开机自动运行");
+        Notify(enabled ? StartupRegistration.LastFallbackReason is null
+            ? "已开启登录后立即启动，并恢复上次布局"
+            : "系统未允许登录任务，已使用兼容自启动方式（可能被 Windows 延迟）"
+            : "已关闭开机自动运行");
     }
-    private void ConfigureDesktopIntegration()
+    private void ConfigureDesktopIntegration(bool retryOnFailure = false)
     {
         if (!Layout.DesktopIntegrationEnabled) { _desktop.Dispose(); return; }
         try { _desktop.Enable(); }
         catch (Exception error)
-        { Report(error); Layout.DesktopIntegrationEnabled = false; Status = "原生桌面整合未开启：" + error.Message; }
+        {
+            Report(error);
+            if (!retryOnFailure) Layout.DesktopIntegrationEnabled = false;
+            Status = retryOnFailure ? "正在等待 Explorer 桌面就绪，将自动连接。" : "原生桌面整合未开启：" + error.Message;
+        }
     }
     internal void ApplyDesktopZOrder()
     {

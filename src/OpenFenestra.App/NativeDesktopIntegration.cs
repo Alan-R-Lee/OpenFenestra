@@ -44,7 +44,7 @@ internal sealed class DesktopIntegration(WorkspaceController workspace) : IDispo
         catch (Exception error)
         {
             workspace.Report(error); Dispose();
-            _retryAfter = DateTime.UtcNow.AddSeconds(10);
+            _retryAfter = DateTime.UtcNow.AddSeconds(2);
             workspace.ReportStatus("原生桌面组件已断开，已停止隐藏图标；稍后自动重试。");
         }
     }
