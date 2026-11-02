@@ -74,6 +74,9 @@ internal static class SmokeTest
             workspace.Manager.Show();
             Capture(workspace.Manager, Path.Combine(workspace.Store.DirectoryPath, "manager-preview.png"));
             Capture(workspace.Panels.Single(), Path.Combine(workspace.Store.DirectoryPath, "panel-preview.png"));
+            workspace.Layout.Groups[0].Name = "退出保存验证";
+            workspace.ScheduleSave(); workspace.Dispose();
+            Check(workspace.Store.Load().Groups[0].Name == "退出保存验证", "退出时立即保存待处理布局", checks);
         }
         catch (Exception error) { workspace.Report(error); checks.Add("FAILED: " + error); exitCode = 1; }
         finally
