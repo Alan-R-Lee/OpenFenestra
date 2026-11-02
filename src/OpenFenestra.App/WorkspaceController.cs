@@ -78,10 +78,16 @@ internal sealed class WorkspaceController : IDisposable
         {
             if (_disposed) return;
             try { _ = ShellFiles.DesktopItems(); } catch (Exception error) { Report(error); }
+            foreach (var panel in Panels) panel.RefreshNames();
             ConfigureAutoOrganize(); ConfigureDesktopIntegration(retryOnFailure: true); _anchor.Start();
             if (Layout.StartWithWindows)
             {
-                try { StartupRegistration.SetEnabled(true); }
+                try
+                {
+                    StartupRegistration.SetEnabled(true);
+                    if (StartupRegistration.LastFallbackReason is not null)
+                        ReportStatus("系统未允许登录任务，已使用兼容自启动方式（可能被 Windows 延迟）");
+                }
                 catch (Exception error) { Report(error); }
             }
             SaveNow();

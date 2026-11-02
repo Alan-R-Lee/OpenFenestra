@@ -11,13 +11,18 @@ namespace OpenFenestra.App;
 internal sealed class EntryView(DesktopEntry entry, int iconSize = 48) : INotifyPropertyChanged
 {
     public string Path => entry.Path;
-    public string Name => entry.Name;
+    public string Name { get; private set; } = entry.Name;
     public double ItemOpacity => entry.Exists ? 1 : 0.45;
     public int IconSize => iconSize;
     public int TileHeight => iconSize + 55;
     private ImageSource? _icon;
     public ImageSource? Icon { get => _icon; set { _icon = value; PropertyChanged?.Invoke(this, new(nameof(Icon))); } }
     public event PropertyChangedEventHandler? PropertyChanged;
+    internal void RefreshName()
+    {
+        Name = ShellFiles.Entry(Path).Name;
+        PropertyChanged?.Invoke(this, new(nameof(Name)));
+    }
 }
 
 public partial class FenceWindow : Window
@@ -134,6 +139,10 @@ public partial class FenceWindow : Window
     private void QueueRefresh() => Dispatcher.BeginInvoke(new Action(() =>
     { if (!_closing) { _refresh.Stop(); _refresh.Start(); } }));
 
+    internal void RefreshNames()
+    {
+        foreach (var view in Items.Items.OfType<EntryView>()) view.RefreshName();
+    }
     private async void RefreshItems()
     {
         // Populate after Loaded, avoiding duplicate Shell icon work during construction.
