@@ -29,6 +29,7 @@ internal static class ShellFiles
     [DllImport("user32.dll")] private static extern bool DestroyIcon(nint icon);
     [DllImport("gdi32.dll")] private static extern bool DeleteObject(nint bitmap);
     private static readonly ConcurrentDictionary<string, ImageSource> Cache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, DesktopEntry> DesktopNames = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Lazy<System.Windows.Threading.Dispatcher> IconDispatcher = new(() =>
     {
         System.Windows.Threading.Dispatcher? dispatcher = null;
@@ -85,34 +86,14 @@ internal static class ShellFiles
 
     internal static IReadOnlyList<DesktopEntry> DesktopItems()
     {
-        var entries = new List<DesktopEntry>();
-        object? shell = null, folder = null, items = null;
-        try
-        {
-            var type = Type.GetTypeFromProgID("Shell.Application");
-            if (type is null) return entries;
-            shell = Activator.CreateInstance(type);
-            folder = ((dynamic)shell!).NameSpace(0);
-            items = ((dynamic)folder!).Items();
-            var count = (int)((dynamic)items!).Count;
-            for (var i = 0; i < count; i++)
-            {
-                object? item = null;
-                try
-                {
-                    item = ((dynamic)items).Item(i);
-                    var path = (string)((dynamic)item!).Path;
-                    var normalized = DesktopAssignments.NormalizeItem(path);
-                    if (normalized is not null) entries.Add(new(normalized, (string)((dynamic)item).Name, (bool)((dynamic)item).IsFolder));
-                }
-                finally { if (item is not null) Marshal.ReleaseComObject(item); }
-            }
-        }
-        catch (COMException e) { Debug.WriteLine(e); }
-        finally { foreach (var value in new[] { items, folder, shell }) if (value is not null) Marshal.ReleaseComObject(value); }
-        entries.AddRange(WorkspaceController.DesktopPaths.SelectMany(FileCatalog.ReadFolder).Select(FileCatalog.Entry));
-        return entries.DistinctBy(e => e.Path, StringComparer.OrdinalIgnoreCase).ToList();
+        // The desktop namespace also contains navigation entries which are not
+        // shown on the desktop. Enumerate the actual Explorer view instead.
+        var entries = NativeDesktopShell.ReadSnapshot().Items.Select(item => new DesktopEntry(item.Path, item.Name, item.IsFolder)).ToList();
+        foreach (var entry in entries) DesktopNames[entry.Path] = entry;
+        return entries;
     }
+
+    internal static DesktopEntry Entry(string path) => DesktopNames.TryGetValue(path, out var entry) ? entry : FileCatalog.Entry(path);
 
     internal static void Open(string path)
     {

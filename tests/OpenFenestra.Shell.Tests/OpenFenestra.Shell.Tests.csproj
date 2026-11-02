@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/OpenFenestra.Core/OpenFenestra.Core.csproj" />
+    <Compile Include="../../src/OpenFenestra.App/GlobalUsings.cs" Link="App/GlobalUsings.cs" />
+    <Compile Include="../../src/OpenFenestra.App/DesktopDrag.cs" Link="App/DesktopDrag.cs" />
+    <Compile Include="../../src/OpenFenestra.App/ShellDataTransfer.cs" Link="App/ShellDataTransfer.cs" />
+  </ItemGroup>
+</Project>

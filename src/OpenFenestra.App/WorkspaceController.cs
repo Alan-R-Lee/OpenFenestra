@@ -22,6 +22,8 @@ internal sealed class WorkspaceController : IDisposable
     private HwndSource? _source;
     private bool _disposed;
     private bool _peeking;
+    private readonly Dictionary<nint, string> _pinErrors = [];
+    private readonly HashSet<nint> _pinnedPanels = [];
     private readonly DesktopIntegration _desktop;
     internal bool IsDragging { get; private set; }
     internal DesktopIntegration Desktop => _desktop;
@@ -53,6 +55,9 @@ internal sealed class WorkspaceController : IDisposable
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("打开管理窗口", null, (_, _) => ShowManager());
         menu.Items.Add("显示所有分组", null, (_, _) => ShowAll());
+        menu.Items.Add("整理分栏位置", null, (_, _) => ArrangePanels());
+        menu.Items.Add("折叠所有分栏", null, (_, _) => CollapseAll(true));
+        menu.Items.Add("展开所有分栏", null, (_, _) => CollapseAll(false));
         menu.Items.Add("临时隐藏所有分组", null, (_, _) => { foreach (var p in Panels) p.Hide(); });
         menu.Items.Add("速览 / 取消置顶   Ctrl+Alt+Space", null, (_, _) => Peek());
         menu.Items.Add("恢复 Windows 原生桌面图标", null, (_, _) => SetDesktopIntegration(false));
@@ -66,6 +71,7 @@ internal sealed class WorkspaceController : IDisposable
         if (!NativeDesktop.RegisterHotKey(hwnd, 7, 0x0001 | 0x0002 | 0x4000, 0x20))
             Status = "Ctrl+Alt+Space 已被其他程序占用，可通过托盘使用速览。";
         if (Store.RecoveredFromBackup) Status = "已从备份恢复布局；损坏的原文件已单独保留。";
+        try { _ = ShellFiles.DesktopItems(); } catch (Exception error) { Report(error); }
         SyncPanels(); ConfigureAutoOrganize(); ConfigureDesktopIntegration(); _anchor.Start();
         // Only a previously enabled user preference repairs a relocated startup command.
         if (Layout.StartWithWindows) StartupRegistration.SetEnabled(true);
@@ -115,7 +121,8 @@ internal sealed class WorkspaceController : IDisposable
 
     internal void OrganizeDesktop()
     {
-        var count = FileCatalog.Organize(Layout, DesktopPaths);
+        Store.Snapshot(Layout);
+        var count = FileCatalog.OrganizeEntries(Layout, ShellFiles.DesktopItems());
         Notify($"已归类 {count} 个新桌面项目 · 原文件位置保持不变");
     }
 
@@ -130,7 +137,8 @@ internal sealed class WorkspaceController : IDisposable
         Store.Snapshot(Layout);
         Layout.DesktopIntegrationEnabled = enabled;
         if (enabled) Layout.PinToDesktop = true;
-        ConfigureDesktopIntegration(); Notify(enabled ? "桌面接管已开启 · 已收纳图标只显示在分栏中" : "已恢复 Windows 原生桌面图标");
+        ConfigureDesktopIntegration();
+        Notify(Layout.DesktopIntegrationEnabled ? "原生桌面整合已开启 · 已收纳图标只在分栏中绘制" : enabled ? Status : "已恢复所有 Windows 原生桌面图标");
     }
     internal void SetStartup(bool enabled)
     {
@@ -142,14 +150,20 @@ internal sealed class WorkspaceController : IDisposable
         if (!Layout.DesktopIntegrationEnabled) { _desktop.Dispose(); return; }
         try { _desktop.Enable(); }
         catch (Exception error)
-        { Report(error); Layout.DesktopIntegrationEnabled = false; Status = "桌面接管未开启：" + error.Message; }
+        { Report(error); Layout.DesktopIntegrationEnabled = false; Status = "原生桌面整合未开启：" + error.Message; }
     }
     internal void ApplyDesktopZOrder()
     {
         if (!Layout.PinToDesktop && !_desktop.Enabled) return;
-        var windows = _panels.Values.Where(p => p.IsVisible && !p.Topmost).Cast<Window>()
-            .Concat(_desktop.Surfaces.Where(s => s.IsVisible));
+        var windows = _panels.Values.Where(p => p.IsVisible && !p.Topmost).Cast<Window>().ToArray();
         NativeDesktop.AnchorWindows(windows);
+        foreach (var panel in windows)
+        {
+            var handle = new WindowInteropHelper(panel).Handle;
+            if (VirtualDesktopPinning.TryPin(handle, out var error)) { _pinErrors.Remove(handle); _pinnedPanels.Add(handle); }
+            else if (error is not null && (!_pinErrors.TryGetValue(handle, out var previous) || previous != error))
+            { _pinnedPanels.Remove(handle); _pinErrors[handle] = error; Report(new InvalidOperationException(error)); }
+        }
     }
     internal void Collect(FenceTab tab, IEnumerable<string> paths)
     {
@@ -158,17 +172,111 @@ internal sealed class WorkspaceController : IDisposable
     }
     internal void ReturnToDesktop(IEnumerable<string> paths, DesktopPosition position)
     {
-        if (!_desktop.Enabled) SetDesktopIntegration(true);
-        if (!_desktop.Enabled) throw new InvalidOperationException("桌面接管未开启，未改变图标归属。");
-        var count = DesktopAssignments.ReturnToDesktop(Layout, paths, position);
-        Notify($"已将 {count} 个图标放回桌面");
+        var items = paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var native = NativeDesktopShell.ReadSnapshot().Items.ToDictionary(i => i.Path, StringComparer.OrdinalIgnoreCase);
+        // A reference to a file outside the Desktop needs a real desktop link.
+        // Never pretend that an entry in our JSON creates an Explorer icon.
+        var desktopItems = items.Select(path => native.ContainsKey(path) ? path : CreateDesktopShortcut(path)).ToArray();
+        var count = DesktopAssignments.ReturnToDesktop(Layout, items, position);
+        for (var index = 0; index < desktopItems.Length; index++)
+            Layout.DesktopPositions[desktopItems[index]] = new(position.X + index * 90, position.Y);
+        Notify($"已将 {count} 个图标放回原生桌面");
+        var destinations = desktopItems.Select((path, index) => (path, point: NativeDesktopShell.ScreenToView(VisibleDesktopPoint(position.X + index * 90, position.Y))))
+            .ToDictionary(item => item.path, item => item.point, StringComparer.OrdinalIgnoreCase);
+        NativeDesktopShell.PositionItems(destinations);
     }
     internal void DragItems(DependencyObject source, string[] paths)
     {
         if (paths.Length == 0) return;
-        IsDragging = true; _desktop.DragChanged();
-        try { DragDrop.DoDragDrop(source, new DesktopDrag(paths).Data(), DragDropEffects.Link | DragDropEffects.Copy); }
-        finally { IsDragging = false; _desktop.DragChanged(); }
+        IsDragging = true;
+        NativeDesktopPoint? desktopDrop = null;
+        QueryContinueDragEventHandler continuation = (_, e) =>
+        {
+            if (e.EscapePressed) { desktopDrop = null; e.Action = DragAction.Cancel; return; }
+            if ((e.KeyStates & DragDropKeyStates.LeftMouseButton) != 0) return;
+            var cursor = Forms.Cursor.Position;
+            var point = new NativeDesktopPoint(cursor.X, cursor.Y);
+            if (!NativeDesktopShell.IsDesktopAtScreenPoint(point)) return;
+            desktopDrop = point; e.Action = DragAction.Cancel; e.Handled = true;
+        };
+        DragDrop.AddQueryContinueDragHandler(source, continuation);
+        try { DragDrop.DoDragDrop(source, new DesktopDrag(paths).Data(false), DragDropEffects.Link | DragDropEffects.Copy); }
+        finally { IsDragging = false; DragDrop.RemoveQueryContinueDragHandler(source, continuation); }
+        if (desktopDrop is { } drop) ReturnToDesktop(paths, new(drop.X, drop.Y));
+    }
+
+    private static NativeDesktopPoint VisibleDesktopPoint(double x, double y)
+    {
+        var candidate = new System.Drawing.Point((int)x, (int)y);
+        var screen = Forms.Screen.AllScreens.FirstOrDefault(s => s.WorkingArea.Contains(candidate)) ?? Forms.Screen.PrimaryScreen!;
+        return new(Math.Clamp(candidate.X, screen.WorkingArea.Left + 12, screen.WorkingArea.Right - 90),
+            Math.Clamp(candidate.Y, screen.WorkingArea.Top + 12, screen.WorkingArea.Bottom - 100));
+    }
+
+    private string CreateDesktopShortcut(string path)
+    {
+        if (!File.Exists(path) && !Directory.Exists(path)) throw new FileNotFoundException("原项目不可用，未移除分栏引用。", path);
+        var directory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        var extension = Path.GetExtension(path);
+        var copyLink = extension.Equals(".lnk", StringComparison.OrdinalIgnoreCase) || extension.Equals(".url", StringComparison.OrdinalIgnoreCase);
+        var name = Directory.Exists(path) ? Path.GetFileName(path) : Path.GetFileNameWithoutExtension(path);
+        var suffix = copyLink ? extension : ".lnk";
+        var staging = Path.Combine(Store.DirectoryPath, "shortcut-staging");
+        Directory.CreateDirectory(staging);
+        var temporary = Path.Combine(staging, Guid.NewGuid().ToString("N") + suffix);
+        object? shell = null, link = null;
+        try
+        {
+            if (copyLink) File.Copy(path, temporary, false);
+            else
+            {
+                var type = Type.GetTypeFromProgID("WScript.Shell") ?? throw new InvalidOperationException("无法创建桌面快捷方式。");
+                shell = Activator.CreateInstance(type); link = ((dynamic)shell!).CreateShortcut(temporary);
+                ((dynamic)link).TargetPath = path; ((dynamic)link).Save();
+            }
+            for (var index = 1; index <= 1000; index++)
+            {
+                var target = Path.Combine(directory, name + (index == 1 ? "" : " (" + index + ")") + suffix);
+                try { File.Move(temporary, target, false); return target; }
+                catch (IOException) when (File.Exists(target) || Directory.Exists(target)) { }
+            }
+            throw new IOException("桌面同名快捷方式过多，未覆盖任何已有项目。");
+        }
+        finally
+        {
+            if (link is not null) System.Runtime.InteropServices.Marshal.ReleaseComObject(link);
+            if (shell is not null) System.Runtime.InteropServices.Marshal.ReleaseComObject(shell);
+            try { if (File.Exists(temporary)) File.Delete(temporary); }
+            catch (IOException error) { System.Diagnostics.Debug.WriteLine(error); }
+        }
+    }
+
+    internal void ArrangePanels()
+    {
+        Store.Snapshot(Layout);
+        var area = Forms.Screen.PrimaryScreen!.WorkingArea;
+        var dpi = VisualTreeHelper.GetDpi(Manager);
+        var width = area.Width / dpi.DpiScaleX; var height = area.Height / dpi.DpiScaleY;
+        var columns = Math.Clamp((int)((width - 32) / 310), 1, Math.Max(1, Math.Min(4, Layout.Groups.Count)));
+        var rows = Math.Max(1, (int)Math.Ceiling((double)Layout.Groups.Count / columns));
+        var panelWidth = Math.Clamp((width - (columns + 1) * 16) / columns, 260, 420);
+        var panelHeight = Math.Clamp((height - 56 - (rows + 1) * 16) / rows, 180, 420);
+        for (var index = 0; index < Layout.Groups.Count; index++)
+        {
+            var group = Layout.Groups[index];
+            group.X = area.Left / dpi.DpiScaleX + 16 + index % columns * (panelWidth + 16);
+            group.Y = area.Top / dpi.DpiScaleY + 32 + index / columns * (panelHeight + 16);
+            group.Width = panelWidth; group.Height = panelHeight; group.Visible = true;
+        }
+        Notify("已按屏幕可用空间排列分栏，原分类和标签页保留");
+    }
+
+    internal void ReportStatus(string status) { Status = status; Changed?.Invoke(); }
+
+    internal void CollapseAll(bool collapsed)
+    {
+        foreach (var group in Layout.Groups) group.Collapsed = collapsed;
+        Notify(collapsed ? "已折叠所有分栏；单击栏头展开" : "已展开所有分栏");
     }
 
     private void ConfigureAutoOrganize()
@@ -200,7 +308,22 @@ internal sealed class WorkspaceController : IDisposable
     internal void ScheduleSave() { if (_disposed) return; _save.Stop(); _save.Start(); }
     internal void SaveNow()
     {
-        try { Store.Save(Layout); }
+        try
+        {
+            Store.Save(Layout);
+            try
+            {
+                var runtime = new { processId = Environment.ProcessId, packageIdentity = RuntimePaths.PackageIdentity,
+                    executable = Environment.ProcessPath, nativeEnabled = _desktop.Enabled,
+                    hiddenCount = _desktop.HiddenCount, nativeCapabilities = _desktop.Capabilities,
+                    visiblePanels = Panels.Count(p => p.IsVisible),
+                    desktopOwnedPanels = Panels.Count(p => NativeDesktop.IsDesktopOwned(p)),
+                    pinnedPanels = Panels.Count(p => _pinnedPanels.Contains(new WindowInteropHelper(p).Handle)),
+                    startupEnabled = StartupRegistration.IsEnabled(), updated = DateTimeOffset.Now };
+                File.WriteAllText(Path.Combine(Store.DirectoryPath, "runtime-state.json"), System.Text.Json.JsonSerializer.Serialize(runtime));
+            }
+            catch (Exception error) { System.Diagnostics.Debug.WriteLine(error); }
+        }
         catch (Exception error)
         {
             Report(error); Status = "布局保存失败：" + error.Message; Changed?.Invoke();

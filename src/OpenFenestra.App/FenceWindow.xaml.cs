@@ -27,7 +27,7 @@ public partial class FenceWindow : Window
     private FileSystemWatcher? _watcher;
     private string? _watchedPath;
     private readonly DispatcherTimer _refresh = new() { Interval = TimeSpan.FromMilliseconds(400) };
-    private bool _ready, _closing;
+    private bool _ready, _closing, _applyingGeometry;
     private Point _dragStart;
     private int _generation;
     private bool _headerArmed, _searchVisible;
@@ -51,7 +51,7 @@ public partial class FenceWindow : Window
             ClampToScreens(); _ready = true; RefreshItems();
             _workspace.ApplyDesktopZOrder();
         };
-        LocationChanged += (_, _) => { if (_ready) { Model.X = Left; Model.Y = Top; _workspace.ScheduleSave(); } };
+        LocationChanged += (_, _) => { if (_ready && !_applyingGeometry) { Model.X = Left; Model.Y = Top; _workspace.ScheduleSave(); } };
         Deactivated += (_, _) => { if (!Topmost) _workspace.ApplyDesktopZOrder(); };
         Closing += (_, e) => { if (!_closing && !_workspace.Exiting) { e.Cancel = true; Model.Visible = false; _workspace.Notify(); } };
         Search.Text = "";
@@ -73,7 +73,9 @@ public partial class FenceWindow : Window
         Accent.Background = Brush(Model.Color);
         var color = (Color)ColorConverter.ConvertFromString("#151C22");
         Surface.Background = new SolidColorBrush(Color.FromArgb((byte)((Model.Collapsed ? Model.CollapsedOpacity : Model.Opacity) * 255), color.R, color.G, color.B));
-        Left = Model.X; Top = Model.Y; Width = Model.Width;
+        _applyingGeometry = true;
+        try { Left = Model.X; Top = Model.Y; Width = Model.Width; }
+        finally { _applyingGeometry = false; }
         var target = Model.Collapsed ? 34 : Model.Height;
         MinHeight = Model.Collapsed ? 34 : 180;
         BeginAnimation(HeightProperty, null); Height = target;
@@ -138,7 +140,7 @@ public partial class FenceWindow : Window
         var generation = ++_generation;
         var tab = Model.ActiveTab;
         var search = Search.Text.Trim();
-        var entries = FileCatalog.ReadTab(tab).Where(e => e.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase)).ToList();
+        var entries = FileCatalog.ReadTab(tab).Select(e => ShellFiles.Entry(e.Path)).Where(e => e.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase)).ToList();
         var views = entries.Take(300).Select(e => new EntryView(e, Model.IconSize)).ToArray();
         Items.ItemsSource = views;
         Empty.Text = tab.IsPortal && !Directory.Exists(tab.FolderPath) ? "文件夹暂不可用\n请检查路径或网络连接" : search.Length > 0 ? "没有匹配的项目" : tab.IsPortal ? "这个文件夹还没有项目" : "把文件、文件夹或快捷方式拖到这里\n从这里开始整理桌面";
@@ -292,6 +294,7 @@ public partial class FenceWindow : Window
     private void OnItemMouseDown(object sender, MouseButtonEventArgs e) => _dragStart = e.GetPosition(Items);
     private void OnItemMouseMove(object sender, MouseEventArgs e)
     {
+        if (Model.ActiveTab.IsPortal) return;
         var point = e.GetPosition(Items);
         if (e.LeftButton != MouseButtonState.Pressed || Items.SelectedItem is not EntryView item
             || Math.Abs(point.X - _dragStart.X) + Math.Abs(point.Y - _dragStart.Y) < 12) return;

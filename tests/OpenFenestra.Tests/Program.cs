@@ -45,6 +45,42 @@ try
         var layout = new Layout(); Assert(FileCatalog.Organize(layout, [source]) == 4);
         Assert(FileCatalog.Organize(layout, [source, source]) == 0); Assert(layout.Groups.Count == 4);
     });
+    Test("Shell organization collects virtual entries once without moving files", () =>
+    {
+        const string recycle = "::{645FF040-5081-101B-9F08-00AA002F954E}";
+        var layout = new Layout { DesktopItems = [recycle, doc] };
+        DesktopEntry[] entries = [new(recycle, "回收站", true), new(recycle.ToLowerInvariant(), "回收站", true), FileCatalog.Entry(doc)];
+        Assert(FileCatalog.OrganizeEntries(layout, entries) == 2);
+        Assert(layout.Groups.Single(g => g.Name == "系统入口").ActiveTab.Items.Single() == recycle);
+        Assert(layout.Groups.Single(g => g.Name == "文档与笔记").ActiveTab.Items.Single() == doc);
+        Assert(layout.DesktopItems.Count == 0 && FileCatalog.OrganizeEntries(layout, entries) == 0);
+        Assert(File.ReadAllText(doc) == "fixture" && File.ReadAllText(link) == "fixture");
+    });
+    Test("Organization preserves manual assignments and clears redundant desktop pins", () =>
+    {
+        var manual = new FenceGroup { Name = "我的分类" };
+        manual.ActiveTab.Items.Add(doc);
+        var layout = new Layout { Groups = [manual], DesktopItems = [doc.ToUpperInvariant(), image] };
+        Assert(FileCatalog.OrganizeEntries(layout, [FileCatalog.Entry(doc), FileCatalog.Entry(image)]) == 1);
+        Assert(manual.ActiveTab.Items.Single() == doc);
+        Assert(layout.Groups.All(group => group.Name != "文档与笔记") && layout.DesktopItems.Count == 0);
+    });
+    Test("Portal references do not exclude entries from ordinary organization", () =>
+    {
+        var portal = new FenceGroup { Name = "文档与笔记", Tabs = [new() { FolderPath = source, Items = [doc] }] };
+        var layout = new Layout { Groups = [portal] };
+        Assert(FileCatalog.OrganizeEntries(layout, [FileCatalog.Entry(doc)]) == 1);
+        Assert(portal.ActiveTab.IsPortal && portal.ActiveTab.Items.Single() == doc);
+        Assert(layout.Groups.Single(group => !group.ActiveTab.IsPortal).ActiveTab.Items.Single() == doc);
+        Assert(DesktopAssignments.Assigned(layout).Count == 1 && File.Exists(doc));
+    });
+    Test("Shell organization rejects unsafe and missing entries", () =>
+    {
+        var layout = new Layout();
+        Assert(FileCatalog.OrganizeEntries(layout, [new("https://example.com", "web", false),
+            new("relative.txt", "relative", false), new(Path.Combine(root, "missing"), "missing", false)]) == 0);
+        Assert(layout.Groups.Count == 0);
+    });
     Test("Live folder lists changes and tolerates missing directory", () =>
     {
         var tab = new FenceTab { FolderPath = folder }; Assert(FileCatalog.ReadTab(tab).Count == 0);

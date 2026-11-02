@@ -7,6 +7,8 @@ $dotnetCommand = if (Test-Path -LiteralPath $localDotnet) { $localDotnet } else 
 if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
 & $dotnetCommand run --project tests/OpenFenestra.Tests -c Release --no-build
 if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
+& $dotnetCommand run --project tests/OpenFenestra.Shell.Tests -c Release --no-build
+if ($LASTEXITCODE -ne 0) { throw 'Shell data tests failed' }
 $testData = Join-Path $projectRoot ('.qa\run-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $testData -Force | Out-Null
 & $dotnetCommand run --project src/OpenFenestra.App -c Release --no-build -- --data-dir $testData --smoke-test

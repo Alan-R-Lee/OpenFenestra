@@ -65,6 +65,7 @@ public static class FileCatalog
 
     public static string Category(string path)
     {
+        if (DesktopAssignments.IsVirtual(path)) return "系统入口";
         if (Directory.Exists(path)) return "文件夹";
         var ext = System.IO.Path.GetExtension(path);
         if (ext.Equals(".lnk", StringComparison.OrdinalIgnoreCase) || ext.Equals(".exe", StringComparison.OrdinalIgnoreCase) || ext.Equals(".url", StringComparison.OrdinalIgnoreCase)) return "应用与快捷方式";
@@ -73,25 +74,33 @@ public static class FileCatalog
         return Media.Contains(ext) ? "影音与媒体" : "其他项目";
     }
 
-    public static int Organize(Layout layout, IEnumerable<string> desktopPaths)
+    public static int Organize(Layout layout, IEnumerable<string> desktopPaths) =>
+        OrganizeEntries(layout, desktopPaths.SelectMany(ReadFolder).Select(Entry));
+
+    /// <summary>Organizes Shell entries by reference, preserving assignments in ordinary tabs.</summary>
+    public static int OrganizeEntries(Layout layout, IEnumerable<DesktopEntry> entries)
     {
-        var known = layout.Groups.SelectMany(g => g.Tabs).SelectMany(t => t.Items)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // A folder portal is a live view, not exclusive ownership of its contents.
+        var known = DesktopAssignments.Assigned(layout);
+        layout.DesktopItems.RemoveAll(path => known.Contains(path));
         var added = 0;
-        foreach (var path in desktopPaths.SelectMany(ReadFolder).Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var entry in entries)
         {
-            if (!known.Add(path)) continue;
+            var path = DesktopAssignments.NormalizeItem(entry.Path);
+            if (path is null || (!DesktopAssignments.IsVirtual(path) && !File.Exists(path) && !Directory.Exists(path))
+                || known.Contains(path)) continue;
             var category = Category(path);
-            var group = layout.Groups.FirstOrDefault(g => g.Name == category && !g.ActiveTab.IsPortal);
+            var group = layout.Groups.FirstOrDefault(g => g.Name == category && !g.ActiveTab.IsPortal && g.ActiveTab.Items.Count < 10000);
             if (group is null)
             {
-                if (layout.Groups.Count >= 100) break;
+                if (layout.Groups.Count >= 100) continue;
                 var index = layout.Groups.Count;
                 group = new() { Name = category, X = 90 + index % 3 * 370, Y = 90 + index / 3 * 350,
                     Color = new[] { "#78B9A1", "#8CA9DB", "#C0A2D1", "#D6AE75", "#D98F9D", "#8BBFC8" }[index % 6] };
                 layout.Groups.Add(group);
             }
-            added += AddReferences(group.ActiveTab, [path]);
+            added += DesktopAssignments.Collect(layout, group.ActiveTab, [path]);
+            known.Add(path);
         }
         return added;
     }

@@ -32,17 +32,18 @@ try {
     $ready = Get-Content -LiteralPath $readyPath -Raw | ConvertFrom-Json
     if ($ready.processId -ne $crash.Id) { throw 'Crash test process identity mismatch' }
     Stop-Process -Id $crash.Id -Force
-    $recoveryPath = Join-Path $crashData 'desktop-recovery.json'
-    $deadline = [DateTime]::UtcNow.AddSeconds(12)
-    while (Test-Path -LiteralPath $recoveryPath) {
-        if ([DateTime]::UtcNow -gt $deadline) { throw 'Desktop recovery guard did not finish' }
-        Start-Sleep -Milliseconds 200
-    }
     $inspectionPath = Join-Path $testRoot 'native-after-crash.json'
-    $inspect = Start-Process -FilePath $testExe -ArgumentList @('--inspect-desktop', ('"' + $inspectionPath + '"')) -WindowStyle Hidden -PassThru
-    if (-not $inspect.WaitForExit(10000)) { throw 'Desktop inspection timed out' }
-    $state = Get-Content -LiteralPath $inspectionPath -Raw | ConvertFrom-Json
-    if (-not $state.hasDesktop -or $state.nativeIconsVisible -ne $ready.originalVisible) { throw 'Original desktop visibility was not restored after the crash' }
-    Write-Output 'PASS: Crash guard restored original Windows desktop icons'
+    $deadline = [DateTime]::UtcNow.AddSeconds(15)
+    do {
+        Start-Sleep -Milliseconds 300
+        $inspect = Start-Process -FilePath $testExe -ArgumentList @('--inspect-desktop', ('"' + $inspectionPath + '"')) -WindowStyle Hidden -PassThru
+        try { if (-not $inspect.WaitForExit(10000)) { throw 'Desktop inspection timed out' } }
+        finally { if (-not $inspect.HasExited) { Stop-Process -Id $inspect.Id -Force }; $inspect.Dispose() }
+        $state = Get-Content -LiteralPath $inspectionPath -Raw | ConvertFrom-Json
+        if (-not $state.bridgeConnected -and $state.hiddenCount -eq 0) { break }
+        if ([DateTime]::UtcNow -gt $deadline) { throw 'Native bridge did not restore the desktop after the controller crash' }
+    } while ($true)
+    if (-not $state.hasDesktop -or $state.nativeIconsVisible -ne $ready.originalVisible) { throw 'Original desktop visibility changed after the crash' }
+    Write-Output 'PASS: Native watchdog restored all icons and detached after controller crash'
     Write-Output "Results: $testRoot"
 } finally { if (-not $crash.HasExited) { Stop-Process -Id $crash.Id -Force }; $crash.Dispose() }

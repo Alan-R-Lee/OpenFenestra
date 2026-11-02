@@ -33,6 +33,9 @@ internal static class SmokeTest
             Check(panel.IsVisible, "面板窗口创建与显示", checks);
             Check(((ListBox)panel.FindName("Items")).Items.Count == 4, "引用图标列表渲染", checks);
             Check(File.Exists(note), "添加引用保留原文件", checks);
+            group.X = 440; group.Y = 180; workspace.Notify();
+            Check(panel.Left == 440 && panel.Top == 180 && group.X == 440 && group.Y == 180,
+                "同时更新横纵位置不被窗口事件覆盖", checks);
             panel.HandleHeaderClick(2); await Task.Delay(220);
             Trace($"folded: model={group.Collapsed}, height={panel.Height}, actual={panel.ActualHeight}");
             Check(group.Collapsed && Math.Abs(panel.Height - 34) < 1, "折叠标题栏", checks);
@@ -55,6 +58,7 @@ internal static class SmokeTest
             Check(((ListBox)panel.FindName("Items")).Items.Count == 1, "搜索筛选项目", checks);
             search.Text = "";
             Check(NativeDesktop.Anchor(panel), "Win32 桌面层定位调用", checks);
+            Check(NativeDesktop.IsDesktopOwned(panel), "分栏窗口归属于原生桌面宿主", checks);
             workspace.Store.Save(workspace.Layout);
             Check(workspace.Store.Load().Groups.Single().Tabs.Count == 2, "布局磁盘往返", checks);
             var snapshot = workspace.Store.Snapshot(workspace.Layout);

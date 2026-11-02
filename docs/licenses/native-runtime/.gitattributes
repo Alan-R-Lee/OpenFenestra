@@ -1,0 +1,3 @@
+# Preserve the upstream documents byte-for-byte, including the recorded hashes.
+*.txt -text
+SHA256SUMS -text
