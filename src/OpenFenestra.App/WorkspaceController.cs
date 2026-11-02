@@ -238,6 +238,7 @@ internal sealed class WorkspaceController : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
+        SaveNow(); // Windows logoff/shutdown must also flush the debounce queue.
         _disposed = true; Exiting = true; _save.Stop(); _organize.Stop(); _anchor.Stop();
         _desktop.Dispose();
         foreach (var watcher in _desktopWatchers) watcher.Dispose();
