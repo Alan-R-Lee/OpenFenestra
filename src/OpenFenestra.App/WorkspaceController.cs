@@ -22,6 +22,9 @@ internal sealed class WorkspaceController : IDisposable
     private HwndSource? _source;
     private bool _disposed;
     private bool _peeking;
+    private readonly DesktopIntegration _desktop;
+    internal bool IsDragging { get; private set; }
+    internal DesktopIntegration Desktop => _desktop;
     internal bool Exiting { get; private set; }
     internal IEnumerable<FenceWindow> Panels => _panels.Values;
     internal static string[] DesktopPaths => new[] {
@@ -31,14 +34,15 @@ internal sealed class WorkspaceController : IDisposable
 
     internal WorkspaceController(LayoutStore store)
     {
-        Store = store; Layout = Store.Load();
+        Store = store; DesktopRecovery.RecoverStale(DesktopRecovery.PathFor(store.DirectoryPath)); Layout = Store.Load();
+        _desktop = new DesktopIntegration(this);
         Manager = new MainWindow(this);
         _save.Tick += (_, _) => { _save.Stop(); SaveNow(); };
         _organize.Tick += (_, _) => { _organize.Stop(); if (Layout.AutoOrganize) OrganizeDesktop(); };
         _anchor.Tick += (_, _) =>
         {
-            if (Layout.PinToDesktop && !_peeking)
-                foreach (var panel in _panels.Values.Where(p => p.IsVisible && !p.IsActive)) NativeDesktop.Anchor(panel);
+            _desktop.Tick();
+            if (!_peeking) ApplyDesktopZOrder();
         };
     }
 
@@ -51,6 +55,7 @@ internal sealed class WorkspaceController : IDisposable
         menu.Items.Add("显示所有分组", null, (_, _) => ShowAll());
         menu.Items.Add("临时隐藏所有分组", null, (_, _) => { foreach (var p in Panels) p.Hide(); });
         menu.Items.Add("速览 / 取消置顶   Ctrl+Alt+Space", null, (_, _) => Peek());
+        menu.Items.Add("恢复 Windows 原生桌面图标", null, (_, _) => SetDesktopIntegration(false));
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("退出 OpenFenestra", null, (_, _) => Exit());
         _tray.ContextMenuStrip = menu;
@@ -61,7 +66,9 @@ internal sealed class WorkspaceController : IDisposable
         if (!NativeDesktop.RegisterHotKey(hwnd, 7, 0x0001 | 0x0002 | 0x4000, 0x20))
             Status = "Ctrl+Alt+Space 已被其他程序占用，可通过托盘使用速览。";
         if (Store.RecoveredFromBackup) Status = "已从备份恢复布局；损坏的原文件已单独保留。";
-        SyncPanels(); ConfigureAutoOrganize(); _anchor.Start();
+        SyncPanels(); ConfigureAutoOrganize(); ConfigureDesktopIntegration(); _anchor.Start();
+        // Only a previously enabled user preference repairs a relocated startup command.
+        if (Layout.StartWithWindows) StartupRegistration.SetEnabled(true);
         if (showManager) ShowManager();
     }
 
@@ -85,9 +92,10 @@ internal sealed class WorkspaceController : IDisposable
             if (!panel.Model.Visible) continue;
             panel.Topmost = _peeking;
             panel.Show();
-            if (_peeking) panel.Activate(); else if (Layout.PinToDesktop) NativeDesktop.Anchor(panel);
+            if (_peeking) panel.Activate();
         }
         Status = _peeking ? "速览已开启 · 再按 Ctrl+Alt+Space 取消置顶" : "速览已关闭";
+        if (!_peeking) ApplyDesktopZOrder();
         Changed?.Invoke();
     }
 
@@ -100,6 +108,8 @@ internal sealed class WorkspaceController : IDisposable
     internal void RemoveGroup(FenceGroup group)
     {
         Store.Snapshot(Layout);
+        foreach (var path in group.Tabs.Where(t => !t.IsPortal).SelectMany(t => t.Items))
+            if (!Layout.DesktopItems.Contains(path, StringComparer.OrdinalIgnoreCase)) Layout.DesktopItems.Add(path);
         Layout.Groups.Remove(group); Notify("已移除分组；原文件保留，可从快照恢复分组。");
     }
 
@@ -113,6 +123,52 @@ internal sealed class WorkspaceController : IDisposable
     {
         Layout.PinToDesktop = pin; Layout.AutoOrganize = auto;
         ConfigureAutoOrganize(); Notify("设置已保存");
+    }
+
+    internal void SetDesktopIntegration(bool enabled)
+    {
+        Store.Snapshot(Layout);
+        Layout.DesktopIntegrationEnabled = enabled;
+        if (enabled) Layout.PinToDesktop = true;
+        ConfigureDesktopIntegration(); Notify(enabled ? "桌面接管已开启 · 已收纳图标只显示在分栏中" : "已恢复 Windows 原生桌面图标");
+    }
+    internal void SetStartup(bool enabled)
+    {
+        StartupRegistration.SetEnabled(enabled); Layout.StartWithWindows = enabled;
+        Notify(enabled ? "已开启登录 Windows 后自动运行，并恢复上次布局" : "已关闭开机自动运行");
+    }
+    private void ConfigureDesktopIntegration()
+    {
+        if (!Layout.DesktopIntegrationEnabled) { _desktop.Dispose(); return; }
+        try { _desktop.Enable(); }
+        catch (Exception error)
+        { Report(error); Layout.DesktopIntegrationEnabled = false; Status = "桌面接管未开启：" + error.Message; }
+    }
+    internal void ApplyDesktopZOrder()
+    {
+        if (!Layout.PinToDesktop && !_desktop.Enabled) return;
+        var windows = _panels.Values.Where(p => p.IsVisible && !p.Topmost).Cast<Window>()
+            .Concat(_desktop.Surfaces.Where(s => s.IsVisible));
+        NativeDesktop.AnchorWindows(windows);
+    }
+    internal void Collect(FenceTab tab, IEnumerable<string> paths)
+    {
+        var count = DesktopAssignments.Collect(Layout, tab, paths);
+        Notify($"已收纳 {count} 个图标 · 原文件位置保持不变");
+    }
+    internal void ReturnToDesktop(IEnumerable<string> paths, DesktopPosition position)
+    {
+        if (!_desktop.Enabled) SetDesktopIntegration(true);
+        if (!_desktop.Enabled) throw new InvalidOperationException("桌面接管未开启，未改变图标归属。");
+        var count = DesktopAssignments.ReturnToDesktop(Layout, paths, position);
+        Notify($"已将 {count} 个图标放回桌面");
+    }
+    internal void DragItems(DependencyObject source, string[] paths)
+    {
+        if (paths.Length == 0) return;
+        IsDragging = true; _desktop.DragChanged();
+        try { DragDrop.DoDragDrop(source, new DesktopDrag(paths).Data(), DragDropEffects.Link | DragDropEffects.Copy); }
+        finally { IsDragging = false; _desktop.DragChanged(); }
     }
 
     private void ConfigureAutoOrganize()
@@ -139,7 +195,7 @@ internal sealed class WorkspaceController : IDisposable
     internal void Notify(string? status = null)
     {
         if (status is not null) Status = status;
-        SyncPanels(); ScheduleSave(); Changed?.Invoke();
+        SyncPanels(); _desktop.Refresh(); ApplyDesktopZOrder(); ScheduleSave(); Changed?.Invoke();
     }
     internal void ScheduleSave() { if (_disposed) return; _save.Stop(); _save.Start(); }
     internal void SaveNow()
@@ -170,7 +226,7 @@ internal sealed class WorkspaceController : IDisposable
         Store.Snapshot(Layout);
         foreach (var panel in Panels.ToArray()) panel.DisposePanel();
         _panels.Clear(); Layout = next;
-        ConfigureAutoOrganize(); Notify("布局已恢复 · 恢复前的布局已自动保存为快照");
+        ConfigureAutoOrganize(); ConfigureDesktopIntegration(); Notify("布局已恢复 · 恢复前的布局已自动保存为快照");
     }
 
     internal void Report(Exception error)
@@ -183,6 +239,7 @@ internal sealed class WorkspaceController : IDisposable
     {
         if (_disposed) return;
         _disposed = true; Exiting = true; _save.Stop(); _organize.Stop(); _anchor.Stop();
+        _desktop.Dispose();
         foreach (var watcher in _desktopWatchers) watcher.Dispose();
         if (_source is not null) { NativeDesktop.UnregisterHotKey(_source.Handle, 7); _source.RemoveHook(WndProc); }
         foreach (var panel in Panels.ToArray()) panel.DisposePanel();

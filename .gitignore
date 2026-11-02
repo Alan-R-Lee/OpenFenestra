@@ -8,3 +8,5 @@ artifacts/
 *.suo
 *.log
 .qa/
+data/
+portable.mode

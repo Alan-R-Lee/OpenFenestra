@@ -13,7 +13,7 @@
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom">
           <Border Background="#244B3D" CornerRadius="10" Padding="13" Margin="0,0,0,20"><StackPanel><TextBlock Text="你的桌面，始终在手边" Foreground="#E2EDDF" FontSize="11"/><TextBlock Text="Ctrl + Alt + Space" Foreground="#ACD6B6" FontWeight="SemiBold" Margin="0,7,0,0"/><TextBlock Text="一键速览所有分组" Foreground="#9FBFAE" FontSize="10" Margin="0,4,0,0"/></StackPanel></Border>
-          <TextBlock Text="开源 · 本地存储 · 自由整理" Foreground="#93B19F" FontSize="10"/><TextBlock Text="v0.1.0  /  学习实践版" Foreground="#6F9A83" FontSize="10" Margin="0,7,0,0"/>
+          <TextBlock Text="开源 · 本地存储 · 自由整理" Foreground="#93B19F" FontSize="10"/><TextBlock Text="v0.2.0  /  桌面整合版" Foreground="#6F9A83" FontSize="10" Margin="0,7,0,0"/>
         </StackPanel>
         <Grid/>
       </DockPanel>
@@ -41,7 +41,7 @@
             <StackPanel>
               <Border x:Name="EmptyState" CornerRadius="12" BorderBrush="#DCE3D7" BorderThickness="1" Padding="24" Margin="0,0,0,18"><StackPanel><TextBlock Text="从一个分组开始" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="新建一个收纳盒，或一键归类现有桌面。&#10;也可以映射一个文件夹，让内容随时更新。" Style="{StaticResource Caption}" Margin="0,8,0,14"/><Button Content="创建我的第一个分组  →" HorizontalAlignment="Left" Click="OnCreate"/></StackPanel></Border>
               <ItemsControl x:Name="GroupCards"><ItemsControl.ItemTemplate><DataTemplate><Border BorderBrush="#DEE4DA" BorderThickness="1" Background="White" CornerRadius="12" Margin="0,0,0,10" Padding="16,14"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="8"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Border Background="{Binding Color}" Width="4" CornerRadius="2" Margin="0,2,0,2"/><StackPanel Grid.Column="1" Margin="12,0"><TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"/><TextBlock Text="{Binding Detail}" Foreground="#7C8A7F" FontSize="11" Margin="0,6,0,0" TextTrimming="CharacterEllipsis"/></StackPanel><StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"><Button Content="{Binding VisibilityLabel}" Tag="{Binding Id}" Padding="11,7" Click="OnToggleGroup"/><Button Content="编辑" Tag="{Binding Id}" Padding="11,7" Margin="0" Click="OnEditGroup"/></StackPanel></Grid></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-              <Border Background="#EDF0E9" CornerRadius="10" Padding="15,7" Margin="0,8,0,0"><StackPanel><CheckBox x:Name="PinSetting" Content="将分组保持在桌面层（实验）" Checked="OnSettings" Unchecked="OnSettings"/><TextBlock Text="浮动面板默认位于普通窗口层；桌面层会定期贴近 Explorer。" Foreground="#7E897F" FontSize="10" TextWrapping="Wrap" Margin="19,0,0,5"/><CheckBox x:Name="AutoSetting" Content="自动归类新增桌面项目" Checked="OnSettings" Unchecked="OnSettings"/></StackPanel></Border>
+              <Border Background="#EDF0E9" CornerRadius="10" Padding="15,7" Margin="0,8,0,0"><StackPanel><CheckBox x:Name="DesktopSetting" Content="桌面接管：收纳后隐藏桌面重复图标" Checked="OnDesktopSetting" Unchecked="OnDesktopSetting"/><TextBlock Text="桌面和分栏可双向拖拽；原文件保留，退出时恢复 Windows 图标。" Foreground="#7E897F" FontSize="10" TextWrapping="Wrap" Margin="19,0,0,5"/><CheckBox x:Name="StartupSetting" Content="开机自动运行，并恢复上次布局" Checked="OnStartupSetting" Unchecked="OnStartupSetting"/><CheckBox x:Name="PinSetting" Content="分栏保持在桌面层" Checked="OnSettings" Unchecked="OnSettings"/><CheckBox x:Name="AutoSetting" Content="自动归类新增桌面项目" Checked="OnSettings" Unchecked="OnSettings"/></StackPanel></Border>
             </StackPanel>
           </ScrollViewer>
         </Grid>
@@ -53,11 +53,11 @@
         </Grid>
         <ScrollViewer x:Name="GuidePage" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel>
           <TextBlock Text="桌面整理，按你的方式。" FontSize="28" FontWeight="SemiBold" Margin="0,0,0,24"/>
-          <TextBlock Text="01 / 创建与收纳" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="新建分组后，把文件、文件夹、快捷方式拖进面板。双击项目打开；双击标题栏折叠。拖动标题栏移动，拖动右下角改变大小。分组菜单支持锁定位置和大小。" Style="{StaticResource Caption}" Margin="0,10,0,23"/>
-          <TextBlock Text="02 / 标签页与文件夹" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="点击面板上的 + 添加标签页，右键标签页可以编辑。普通标签页收纳文件引用；填写文件夹路径后，该页成为实时映射。映射页只读浏览，不接受文件拖入，也不修改文件。" Style="{StaticResource Caption}" Margin="0,10,0,23"/>
+          <TextBlock Text="01 / 创建与收纳" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="把桌面图标拖进分栏即可收纳，拖回空白桌面即可移出。双击项目打开；双击栏头折叠，折叠后单击展开并恢复透明度。拖动栏头移动，拖动右下角缩放。" Style="{StaticResource Caption}" Margin="0,10,0,23"/>
+          <TextBlock Text="02 / 标签页与文件夹" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="通过分栏菜单添加标签页；多个标签页时也可点击 +。右键标签页编辑，填写文件夹路径后成为实时映射。映射页只读浏览，不接受拖入，不改变文件位置。" Style="{StaticResource Caption}" Margin="0,10,0,23"/>
           <TextBlock Text="03 / 搜索与速览" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="面板搜索框筛选当前标签页；管理窗口筛选分组名称和标签页。按 Ctrl+Alt+Space 置顶速览，再按一次恢复。托盘菜单可以显示、隐藏所有分组或退出。关闭管理窗口后，面板仍在运行。" Style="{StaticResource Caption}" Margin="0,10,0,23"/>
           <TextBlock Text="04 / 放心试，随时回去" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="移除项目只移除引用，原文件保留。移除分组或标签页前自动保存快照。布局自动保存，导入或恢复前也会留一份快照。导出的布局包含本机文件路径，分享前请自行检查。" Style="{StaticResource Caption}" Margin="0,10,0,23"/>
-          <Border Background="#E8EFDF" CornerRadius="12" Padding="18"><TextBlock Text="这是独立开发的开源学习项目。当前版本使用独立面板，原生桌面图标仍会保留；桌面层功能处于实验阶段，尚不等同于 Fences 的 Explorer 集成。" Foreground="#536C52" TextWrapping="Wrap" LineHeight="24"/></Border>
+          <Border Background="#E8EFDF" CornerRadius="12" Padding="18"><TextBlock Text="开启桌面接管后，只显示未收纳的桌面图标；程序退出时恢复 Windows 原生显示。开机自动运行会在登录后恢复位置、标签页、图标归属和折叠状态，管理窗口留在托盘。" Foreground="#536C52" TextWrapping="Wrap" LineHeight="24"/></Border>
           <Button Content="打开本地配置目录 ↗" HorizontalAlignment="Left" Margin="0,20,0,12" Click="OnOpenData"/>
         </StackPanel></ScrollViewer>
       </Grid>

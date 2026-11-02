@@ -5,10 +5,14 @@ namespace OpenFenestra.Core;
 
 public sealed class Layout
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
     public int Version { get; set; } = CurrentVersion;
     public bool PinToDesktop { get; set; }
     public bool AutoOrganize { get; set; }
+    public bool DesktopIntegrationEnabled { get; set; }
+    public bool StartWithWindows { get; set; }
+    public List<string> DesktopItems { get; set; } = [];
+    public Dictionary<string, DesktopPosition> DesktopPositions { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<FenceGroup> Groups { get; set; } = [];
 
     public Layout Clone() => LayoutCodec.Decode(LayoutCodec.Encode(this));
@@ -22,7 +26,9 @@ public sealed class FenceGroup
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "新分组";
     public string Color { get; set; } = "#78B9A1";
-    public double Opacity { get; set; } = 0.94;
+    public double Opacity { get; set; } = 0.58;
+    public double CollapsedOpacity { get; set; } = 0.20;
+    public int IconSize { get; set; } = 48;
     public double X { get; set; } = 120;
     public double Y { get; set; } = 100;
     public double Width { get; set; } = 340;
@@ -35,6 +41,9 @@ public sealed class FenceGroup
 
     [JsonIgnore] public FenceTab ActiveTab => Tabs.FirstOrDefault(t => t.Id == SelectedTabId) ?? Tabs[0];
 }
+
+// Physical desktop pixels. Each monitor window transforms these into its own DIPs.
+public sealed record DesktopPosition(double X, double Y);
 
 public sealed class FenceTab
 {
@@ -58,8 +67,16 @@ public static class LayoutCodec
             throw new InvalidDataException("布局文件超过 8 MB。");
         var layout = JsonSerializer.Deserialize<Layout>(json, Options)
             ?? throw new InvalidDataException("布局文件为空。");
-        if (layout.Version != Layout.CurrentVersion)
+        if (layout.Version is < 1 or > Layout.CurrentVersion)
             throw new UnsupportedLayoutVersionException(layout.Version);
+        layout.Version = Layout.CurrentVersion;
+        if (layout.DesktopItems is null || layout.DesktopItems.Count > 10000 || layout.DesktopPositions is null || layout.DesktopPositions.Count > 20000)
+            throw new InvalidDataException("桌面项目或位置数据无效。");
+        layout.DesktopItems = layout.DesktopItems.Select(DesktopAssignments.NormalizeItem).Where(p => p is not null)
+            .Cast<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        layout.DesktopPositions = layout.DesktopPositions.Where(p => DesktopAssignments.NormalizeItem(p.Key) is not null && p.Value is not null)
+            .GroupBy(p => DesktopAssignments.NormalizeItem(p.Key)!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(p => p.Key, p => new DesktopPosition(Finite(p.Last().Value.X, 0, -100000, 100000), Finite(p.Last().Value.Y, 0, -100000, 100000)), StringComparer.OrdinalIgnoreCase);
         if (layout.Groups is null || layout.Groups.Count > 100)
             throw new InvalidDataException("布局最多支持 100 个分组。");
         var groupIds = new HashSet<string>(StringComparer.Ordinal);
@@ -75,7 +92,9 @@ public static class LayoutCodec
             group.Y = Finite(group.Y, 100, -100000, 100000);
             group.Width = Finite(group.Width, 340, 260, 2000);
             group.Height = Finite(group.Height, 340, 180, 2000);
-            group.Opacity = Finite(group.Opacity, 0.94, 0.35, 1);
+            group.Opacity = Finite(group.Opacity, 0.58, 0.15, 1);
+            group.CollapsedOpacity = Finite(group.CollapsedOpacity, 0.20, 0.06, 0.65);
+            group.IconSize = Math.Clamp(group.IconSize, 32, 80);
             if (group.Tabs is null || group.Tabs.Count is < 1 or > 30)
                 throw new InvalidDataException("每个分组需要 1 至 30 个标签页。");
             foreach (var tab in group.Tabs)
@@ -85,7 +104,7 @@ public static class LayoutCodec
                 tab.Name = CleanName(tab.Name, "常用");
                 if (tab.Items is null || tab.Items.Count > 10000)
                     throw new InvalidDataException("标签页项目数量无效。");
-                tab.Items = tab.Items.Select(FileCatalog.NormalizePath).Where(p => p is not null)
+                tab.Items = tab.Items.Select(DesktopAssignments.NormalizeItem).Where(p => p is not null)
                     .Cast<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 if (!string.IsNullOrWhiteSpace(tab.FolderPath))
                     tab.FolderPath = FileCatalog.NormalizePath(tab.FolderPath)

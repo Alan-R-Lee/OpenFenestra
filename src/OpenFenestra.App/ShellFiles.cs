@@ -1,12 +1,20 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
+using OpenFenestra.Core;
 
 namespace OpenFenestra.App;
 
 internal static class ShellFiles
 {
+    [StructLayout(LayoutKind.Sequential)] private struct NativeSize { public int Width, Height; }
+    [ComImport, Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellItemImageFactory
+    { [PreserveSig] int GetImage(NativeSize size, uint flags, out nint bitmap); }
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+    private static extern int SHCreateItemFromParsingName(string path, nint bindContext, ref Guid iid, [MarshalAs(UnmanagedType.Interface)] out IShellItemImageFactory factory);
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct ShellFileInfo
     {
@@ -19,42 +27,107 @@ internal static class ShellFiles
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern nint SHGetFileInfo(string path, uint attributes, out ShellFileInfo info, uint size, uint flags);
     [DllImport("user32.dll")] private static extern bool DestroyIcon(nint icon);
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, ImageSource> Cache = new(StringComparer.OrdinalIgnoreCase);
-
-    internal static ImageSource? Icon(string path)
+    [DllImport("gdi32.dll")] private static extern bool DeleteObject(nint bitmap);
+    private static readonly ConcurrentDictionary<string, ImageSource> Cache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Lazy<System.Windows.Threading.Dispatcher> IconDispatcher = new(() =>
     {
-        // Generic files share an extension icon; shortcuts and executables have per-file icons.
-        var ext = Path.GetExtension(path);
-        var key = Directory.Exists(path) ? "<folder>" : ext.ToLowerInvariant() is ".lnk" or ".exe" or ".ico" ? path : ext;
+        System.Windows.Threading.Dispatcher? dispatcher = null;
+        using var ready = new System.Threading.ManualResetEventSlim();
+        var thread = new System.Threading.Thread(() =>
+        { dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher; ready.Set(); System.Windows.Threading.Dispatcher.Run(); })
+        { IsBackground = true, Name = "OpenFenestra Shell Icons" };
+        thread.SetApartmentState(System.Threading.ApartmentState.STA); thread.Start(); ready.Wait();
+        return dispatcher!;
+    });
+
+    internal static ImageSource? Icon(string path, int pixels = 128)
+        => IconDispatcher.Value.Invoke(() => ExtractIcon(path, pixels));
+
+    private static ImageSource? ExtractIcon(string path, int pixels)
+    {
+        pixels = Math.Clamp(pixels, 48, 256);
+        var key = path + "|" + pixels;
         if (Cache.TryGetValue(key, out var cached)) return cached;
-        var handle = SHGetFileInfo(path, Directory.Exists(path) ? 0x10u : 0x80u,
-            out var info, (uint)Marshal.SizeOf<ShellFileInfo>(), 0x100 | (ext.ToLowerInvariant() is ".lnk" or ".exe" or ".ico" ? 0u : 0x10u));
         ImageSource? image = null;
-        if (handle != 0 && info.Icon != 0)
+        IShellItemImageFactory? factory = null;
+        nint bitmap = 0;
+        try
         {
-            try
+            var iid = typeof(IShellItemImageFactory).GUID;
+            // ICONONLY | BIGGERSIZEOK: original icon frames, no thumbnail or GDI upscale.
+            if (SHCreateItemFromParsingName(path, 0, ref iid, out factory) >= 0
+                && factory.GetImage(new() { Width = pixels, Height = pixels }, 0x01 | 0x04, out bitmap) >= 0 && bitmap != 0)
             {
-                var bitmap = Imaging.CreateBitmapSourceFromHIcon(info.Icon, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(40, 40));
-                bitmap.Freeze(); image = bitmap;
+                var source = Imaging.CreateBitmapSourceFromHBitmap(bitmap, 0, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                source.Freeze(); image = source;
             }
-            finally { DestroyIcon(info.Icon); }
+        }
+        catch (Exception e) when (e is COMException or ArgumentException) { Debug.WriteLine(e); }
+        finally
+        {
+            if (bitmap != 0) DeleteObject(bitmap);
+            if (factory is not null) Marshal.ReleaseComObject(factory);
+        }
+        if (image is null)
+        {
+            var flags = 0x100u;
+            if (!File.Exists(path) && !Directory.Exists(path) && !DesktopAssignments.IsVirtual(path)) flags |= 0x10;
+            if (SHGetFileInfo(path, Directory.Exists(path) ? 0x10u : 0x80u, out var info, (uint)Marshal.SizeOf<ShellFileInfo>(), flags) != 0 && info.Icon != 0)
+            {
+                try { var source = Imaging.CreateBitmapSourceFromHIcon(info.Icon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions()); source.Freeze(); image = source; }
+                finally { DestroyIcon(info.Icon); }
+            }
         }
         if (Cache.Count > 1500) Cache.Clear();
         if (image is not null) Cache[key] = image;
         return image;
     }
 
+    internal static IReadOnlyList<DesktopEntry> DesktopItems()
+    {
+        var entries = new List<DesktopEntry>();
+        object? shell = null, folder = null, items = null;
+        try
+        {
+            var type = Type.GetTypeFromProgID("Shell.Application");
+            if (type is null) return entries;
+            shell = Activator.CreateInstance(type);
+            folder = ((dynamic)shell!).NameSpace(0);
+            items = ((dynamic)folder!).Items();
+            var count = (int)((dynamic)items!).Count;
+            for (var i = 0; i < count; i++)
+            {
+                object? item = null;
+                try
+                {
+                    item = ((dynamic)items).Item(i);
+                    var path = (string)((dynamic)item!).Path;
+                    var normalized = DesktopAssignments.NormalizeItem(path);
+                    if (normalized is not null) entries.Add(new(normalized, (string)((dynamic)item).Name, (bool)((dynamic)item).IsFolder));
+                }
+                finally { if (item is not null) Marshal.ReleaseComObject(item); }
+            }
+        }
+        catch (COMException e) { Debug.WriteLine(e); }
+        finally { foreach (var value in new[] { items, folder, shell }) if (value is not null) Marshal.ReleaseComObject(value); }
+        entries.AddRange(WorkspaceController.DesktopPaths.SelectMany(FileCatalog.ReadFolder).Select(FileCatalog.Entry));
+        return entries.DistinctBy(e => e.Path, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
     internal static void Open(string path)
     {
+        if (DesktopAssignments.IsVirtual(path))
+        {
+            var start = new ProcessStartInfo("explorer.exe") { UseShellExecute = false };
+            start.ArgumentList.Add("shell:" + path); Process.Start(start); return;
+        }
         if (!File.Exists(path) && !Directory.Exists(path)) throw new FileNotFoundException("原文件已移动或删除。", path);
         Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
     }
-
     internal static void Reveal(string path)
     {
-        // ArgumentList keeps commas, quotes and spaces inside a single path argument.
+        if (DesktopAssignments.IsVirtual(path)) { Open(path); return; }
         var start = new ProcessStartInfo("explorer.exe") { UseShellExecute = false };
-        start.ArgumentList.Add("/select,"); start.ArgumentList.Add(path);
-        Process.Start(start);
+        start.ArgumentList.Add("/select,"); start.ArgumentList.Add(path); Process.Start(start);
     }
 }

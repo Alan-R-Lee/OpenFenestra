@@ -77,7 +77,7 @@ try
     Test("Geometry, opacity, and colors are normalized", () =>
     {
         var layout = LayoutCodec.Decode("{\"Groups\":[{\"Width\":-1,\"Height\":99999,\"Opacity\":0,\"Color\":\"bad\"}]}");
-        var g = layout.Groups[0]; Assert(g.Width == 260 && g.Height == 2000 && g.Opacity == 0.35 && g.Color == "#78B9A1");
+        var g = layout.Groups[0]; Assert(g.Width == 260 && g.Height == 2000 && g.Opacity == 0.15 && g.Color == "#78B9A1");
     });
     Test("Atomic saves keep a recoverable previous version", () =>
     {
@@ -114,6 +114,69 @@ try
         Assert(LayoutStore.Read(snapshot).Groups[0].Name == "snapshot");
         var export = Path.Combine(root, "export.json"); LayoutStore.Export(export, layout);
         Assert(LayoutStore.Read(export).Groups[0].Name == "changed" && store.Snapshots().Count == 1);
+    });
+    Test("Version 1 layouts migrate without enabling desktop or startup", () =>
+    {
+        var migrated = LayoutCodec.Decode("{\"Version\":1,\"Groups\":[{\"Name\":\"existing\"}]}");
+        Assert(migrated.Version == 2 && migrated.Groups[0].Name == "existing");
+        Assert(!migrated.DesktopIntegrationEnabled && !migrated.StartWithWindows);
+    });
+    Test("Collected desktop icons are filtered from the desktop display", () =>
+    {
+        var group = new FenceGroup(); var layout = new Layout { Groups = [group] };
+        Assert(DesktopAssignments.Collect(layout, group.ActiveTab, [doc]) == 1);
+        Assert(DesktopAssignments.VisibleDesktop(layout, [FileCatalog.Entry(doc), FileCatalog.Entry(image)]).Single().Path == image);
+        Assert(File.ReadAllText(doc) == "fixture");
+    });
+    Test("Dragging a fence item to desktop removes all duplicate assignments", () =>
+    {
+        var a = new FenceGroup(); var b = new FenceGroup(); a.ActiveTab.Items.Add(doc); b.ActiveTab.Items.Add(doc);
+        var layout = new Layout { Groups = [a, b] };
+        DesktopAssignments.ReturnToDesktop(layout, [doc], new(100, 150));
+        Assert(a.ActiveTab.Items.Count == 0 && b.ActiveTab.Items.Count == 0);
+        Assert(DesktopAssignments.VisibleDesktop(layout, [FileCatalog.Entry(doc)]).Count == 1);
+        Assert(layout.DesktopPositions[doc] == new DesktopPosition(100, 150) && File.Exists(doc));
+    });
+    Test("External file references can return to desktop without moving files", () =>
+    {
+        var layout = new Layout(); DesktopAssignments.ReturnToDesktop(layout, [doc], new(200, 300));
+        Assert(DesktopAssignments.VisibleDesktop(layout, []).Single().Path == doc);
+        Assert(File.ReadAllText(doc) == "fixture");
+    });
+    Test("Recollecting an item removes its extra desktop pin", () =>
+    {
+        var group = new FenceGroup(); var layout = new Layout { Groups = [group] };
+        DesktopAssignments.ReturnToDesktop(layout, [doc], new(1, 2));
+        DesktopAssignments.Collect(layout, group.ActiveTab, [doc]);
+        Assert(layout.DesktopItems.Count == 0 && group.ActiveTab.Items.Single() == doc);
+    });
+    Test("Group to group transfers are exclusive and preserve file bytes", () =>
+    {
+        var a = new FenceGroup(); var b = new FenceGroup(); a.ActiveTab.Items.Add(doc);
+        var layout = new Layout { Groups = [a, b] }; DesktopAssignments.Collect(layout, b.ActiveTab, [doc]);
+        Assert(a.ActiveTab.Items.Count == 0 && b.ActiveTab.Items.Single() == doc && File.ReadAllText(doc) == "fixture");
+    });
+    Test("Portals remain read-only and do not hide their browsed files", () =>
+    {
+        var group = new FenceGroup { Tabs = [new() { FolderPath = source }] };
+        var layout = new Layout { Groups = [group] };
+        Assert(DesktopAssignments.Collect(layout, group.ActiveTab, [doc]) == 0);
+        Assert(DesktopAssignments.VisibleDesktop(layout, [FileCatalog.Entry(doc)]).Count == 1);
+    });
+    Test("Virtual Shell items survive grouping and schema round trips", () =>
+    {
+        const string recycle = "::{645FF040-5081-101B-9F08-00AA002F954E}";
+        var group = new FenceGroup(); var layout = new Layout { Groups = [group] };
+        DesktopAssignments.Collect(layout, group.ActiveTab, [recycle]);
+        var clone = layout.Clone(); Assert(clone.Groups[0].ActiveTab.Items.Single() == recycle);
+        Assert(!DesktopAssignments.IsVirtual("https://example.com"));
+    });
+    Test("Desktop positions, icon size and collapsed opacity persist", () =>
+    {
+        var layout = new Layout { StartWithWindows = true, DesktopIntegrationEnabled = true, Groups = [new() { Collapsed = true, CollapsedOpacity = 0.18, IconSize = 64 }] };
+        layout.DesktopPositions[doc] = new(-500, 300);
+        var clone = layout.Clone(); Assert(clone.StartWithWindows && clone.DesktopIntegrationEnabled && clone.Groups[0].Collapsed);
+        Assert(clone.Groups[0].IconSize == 64 && clone.Groups[0].CollapsedOpacity == 0.18 && clone.DesktopPositions[doc].X == -500);
     });
 }
 finally { Directory.Delete(root, true); }

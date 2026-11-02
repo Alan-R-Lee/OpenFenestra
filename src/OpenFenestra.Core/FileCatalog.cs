@@ -2,7 +2,7 @@ namespace OpenFenestra.Core;
 
 public sealed record DesktopEntry(string Path, string Name, bool IsDirectory)
 {
-    public bool Exists => File.Exists(Path) || Directory.Exists(Path);
+    public bool Exists => DesktopAssignments.IsVirtual(Path) || File.Exists(Path) || Directory.Exists(Path);
 }
 
 public static class FileCatalog
@@ -25,7 +25,7 @@ public static class FileCatalog
     {
         var name = System.IO.Path.GetFileName(path);
         if (string.IsNullOrEmpty(name)) name = path;
-        if (System.IO.Path.GetExtension(path).Equals(".lnk", StringComparison.OrdinalIgnoreCase))
+        if (System.IO.Path.GetExtension(path).ToLowerInvariant() is ".lnk" or ".url")
             name = System.IO.Path.GetFileNameWithoutExtension(path);
         return new(path, name, Directory.Exists(path));
     }
