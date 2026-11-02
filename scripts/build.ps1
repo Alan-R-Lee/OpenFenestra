@@ -21,7 +21,8 @@ foreach ($pack in @("microsoft.netcore.app.runtime.$Runtime", "microsoft.windows
     $notices | Copy-Item -Destination $licenseDirectory -Force
 }
 $archive = Join-Path $projectRoot "artifacts\OpenFenestra-$Runtime.zip"
-Compress-Archive -Path (Join-Path $outputDirectory '*') -DestinationPath $archive -Force
+$distributionFiles = @('OpenFenestra.exe','README.md','LICENSE','THIRD_PARTY_NOTICES.md','docs','licenses') | ForEach-Object { Join-Path $outputDirectory $_ }
+Compress-Archive -LiteralPath $distributionFiles -DestinationPath $archive -Force
 $checksum = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
 [System.IO.File]::WriteAllText((Join-Path $projectRoot "artifacts\OpenFenestra-$Runtime.sha256"), "$checksum  OpenFenestra-$Runtime.zip`n")
 Write-Output "Built: $archive"

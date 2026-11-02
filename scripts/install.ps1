@@ -15,7 +15,9 @@ $installedExe = Join-Path $installDirectory 'OpenFenestra.exe'
 $running = Get-Process OpenFenestra -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $installedExe }
 if ($running) { throw 'Exit OpenFenestra using its tray menu before updating the installed copy. Your layout is kept separately.' }
 New-Item -ItemType Directory -Path $installDirectory -Force | Out-Null
-Get-ChildItem -LiteralPath $sourceDirectory | Copy-Item -Destination $installDirectory -Recurse -Force
+@('OpenFenestra.exe','README.md','LICENSE','THIRD_PARTY_NOTICES.md','docs','licenses') | ForEach-Object {
+    Copy-Item -LiteralPath (Join-Path $sourceDirectory $_) -Destination $installDirectory -Recurse -Force
+}
 if (-not $NoStart) {
     $arguments = @('--tray')
     if ($StartWithWindows) { $arguments += '--enable-startup' }
