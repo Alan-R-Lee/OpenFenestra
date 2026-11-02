@@ -4,11 +4,17 @@
 
 Native Windows desktop organizer · C# / WPF / .NET 10 · MIT License
 
+## 原生桌面整合的研发状态
+
+本项目正在调整为保留 Explorer 原生桌面的架构。下面的 v0.2 桌面接管功能属于旧的自有图标层实现，**不等同于原生 Shell 整合**；目前没有发布满足“原生桌面逐项隐藏 + 双向拖放 + Windows 虚拟桌面互通”的新版本。试用现有版本时，请保持“桌面接管”关闭。
+
+2026-11-02 的[原生桌面专项研究](docs/NATIVE_DESKTOP_RESEARCH.md)核对了 DexCorral、Windhawk、Pickets、Windows Shell 官方接口及虚拟桌面参考代码。后续主方向是原生 Shell 桥接组件，在 Explorer 的实际图标视图中协调绘制、选择和拖放；离屏放置不作为主方案。本轮新增的 `VirtualDesktopPinning` 仅是尚未接入界面的适配器，不能视为已验证的跨桌面功能。
+
 ![管理窗口](docs/images/manager.png)
 
 ![桌面分栏](docs/images/panel.png)
 
-## v0.2 功能
+## v0.2 历史实现
 
 - **桌面与分栏双向拖拽**：开启桌面接管后，拖入即收纳，拖出即回到桌面；同一图标不会同时在桌面和普通分栏中显示。
 - **原文件保留**：改变显示归属，不搬动、删除或覆盖文件。公共桌面快捷方式也能收纳。
@@ -28,7 +34,7 @@ Native Windows desktop organizer · C# / WPF / .NET 10 · MIT License
 
 1. 在 [GitHub Actions](https://github.com/Alan-R-Lee/OpenFenestra/actions) 下载 `OpenFenestra-win-x64` 产物并解压。
 2. 运行 `OpenFenestra.exe`。
-3. 在管理窗口开启“桌面接管”，将图标拖到分栏中。通过栏头菜单添加标签页。
+3. 创建分栏并通过栏头菜单添加标签页；当前原生整合仍在研发，请保持“桌面接管”关闭。
 4. 如需自动启动，勾选“开机自动运行，并恢复上次布局”。
 
 默认配置位于 `%LOCALAPPDATA%\OpenFenestra`。关闭管理窗口只收起到托盘，右键托盘可退出或恢复原生桌面。
@@ -58,7 +64,7 @@ Native Windows desktop organizer · C# / WPF / .NET 10 · MIT License
 
 ```powershell
 .\scripts\build.ps1
-.\scripts\install.ps1 -StartWithWindows -DesktopIntegration
+.\scripts\install.ps1 -StartWithWindows
 ```
 
 更新安装目录前请通过托盘退出应用。程序与用户布局分开保存，替换 EXE 不需要删除配置。
@@ -96,6 +102,6 @@ dotnet build OpenFenestra.sln -c Release
 
 ## 文档与许可证
 
-[调研记录](docs/RESEARCH.md) · [架构](docs/ARCHITECTURE.md) · [验证说明](docs/TESTING.md) · [第三方说明](THIRD_PARTY_NOTICES.md)
+[调研记录](docs/RESEARCH.md) · [原生桌面专项研究](docs/NATIVE_DESKTOP_RESEARCH.md) · [架构](docs/ARCHITECTURE.md) · [验证说明](docs/TESTING.md) · [第三方说明](THIRD_PARTY_NOTICES.md)
 
 [MIT](LICENSE) © 2026 Alan-R-Lee and contributors. 本项目与 Stardock 无隶属或合作关系，不包含其源码、二进制文件、图片或授权数据。
