@@ -70,6 +70,10 @@ public partial class MainWindow : Window
     }
     private void OnOrganize(object sender, RoutedEventArgs e) => _workspace.OrganizeDesktop();
     private void OnTray(object sender, RoutedEventArgs e) => Hide();
+    private void OnArrange(object sender, RoutedEventArgs e) => _workspace.ArrangePanels();
+    private void OnCollapseAll(object sender, RoutedEventArgs e) => _workspace.CollapseAll(true);
+    private void OnExpandAll(object sender, RoutedEventArgs e) => _workspace.CollapseAll(false);
+    private void OnExitApp(object sender, RoutedEventArgs e) => _workspace.Exit();
     private void OnSearch(object sender, TextChangedEventArgs e) { if (GroupCards is not null) Render(); }
     private void OnSettings(object sender, RoutedEventArgs e)
     { if (!_rendering) _workspace.UpdateSettings(PinSetting.IsChecked == true, AutoSetting.IsChecked == true); }

@@ -14,14 +14,28 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+      - name: Build native bridge and run isolated native tests
+        shell: pwsh
+        run: ./scripts/build-native.ps1 -SelfTest
       - name: Build with warnings as errors
-        run: dotnet build OpenFenestra.sln -c Release
+        run: dotnet build OpenFenestra.sln -c Release -p:NativeShellBridgeOutputDirectory="${{ github.workspace }}\artifacts\native-win-x64"
       - name: Core regression tests
         run: dotnet run --project tests/OpenFenestra.Tests -c Release --no-build
+      - name: Shell data format regression tests
+        run: dotnet run --project tests/OpenFenestra.Shell.Tests -c Release --no-build
       # UI smoke tests require an interactive Windows desktop; run scripts/test.ps1 locally.
       - name: Publish portable Windows build
         shell: pwsh
         run: ./scripts/build.ps1
+      - name: Verify native bridge in portable archive
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead((Join-Path $PWD 'artifacts/OpenFenestra-win-x64.zip'))
+          try {
+            if (-not $zip.GetEntry('FenestraShellBridge.dll')) { throw 'Native bridge is missing from the portable ZIP.' }
+            if (-not $zip.GetEntry('OpenFenestra.exe')) { throw 'Application is missing from the portable ZIP.' }
+          } finally { $zip.Dispose() }
       - uses: actions/upload-artifact@v7
         with:
           name: OpenFenestra-win-x64

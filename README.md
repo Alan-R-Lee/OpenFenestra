@@ -2,106 +2,132 @@
 
 **桌面，自有条理。** 受 Fences 启发、独立开发的开源 Windows 桌面图标管理软件。
 
-Native Windows desktop organizer · C# / WPF / .NET 10 · MIT License
+Windows 11 x64 · C# / WPF / .NET 10 + C++ Shell bridge · MIT License
 
-## 原生桌面整合的研发状态
+## v0.3 原生桌面实验版
 
-本项目正在调整为保留 Explorer 原生桌面的架构。下面的 v0.2 桌面接管功能属于旧的自有图标层实现，**不等同于原生 Shell 整合**；目前没有发布满足“原生桌面逐项隐藏 + 双向拖放 + Windows 虚拟桌面互通”的新版本。试用现有版本时，请保持“桌面接管”关闭。
+v0.3 保留 Explorer 原生桌面和未收纳图标，通过原创 C++ 组件
+`FenestraShellBridge.dll` 在 Explorer 的实际桌面图标视图中协调逐项绘制、
+选择和拖放。管理界面与分栏由 WPF 提供，没有额外的整屏桌面图标窗口。
 
-2026-11-02 的[原生桌面专项研究](docs/NATIVE_DESKTOP_RESEARCH.md)核对了 DexCorral、Windhawk、Pickets、Windows Shell 官方接口及虚拟桌面参考代码。后续主方向是原生 Shell 桥接组件，在 Explorer 的实际图标视图中协调绘制、选择和拖放；离屏放置不作为主方案。本轮新增的 `VirtualDesktopPinning` 仅是尚未接入界面的适配器，不能视为已验证的跨桌面功能。
+当前源码已经完成原生整合，并通过本机真实 Explorer 接入、逐项隐藏、
+正常退出恢复和控制器异常结束后的恢复检查。这仍是实验版，尚未达到
+Fences 的完整功能与兼容性范围。
 
-![管理窗口](docs/images/manager.png)
+- **原生桌面拖入分栏**：收纳后，原位置不再重复绘制该图标；未收纳项目继续由 Windows 桌面管理。
+- **拖回原生桌面**：从普通分栏拖到桌面空白处，解除归属并放回原生图标。来自桌面之外的文件引用会创建真实的桌面 `.lnk` 快捷方式。
+- **原文件保留**：收纳、跨分栏调整和返回桌面不删除、移动或覆盖原文件。外部文件返回桌面时保留其原位置，通过快捷方式访问。
+- **高清 Shell 图标**：按屏幕 DPI 请求 Windows Shell 图标；支持公共桌面的快捷方式及实际桌面视图中的系统项目。
+- **透明分栏与标签页**：支持搜索、调整位置和尺寸、图标大小、独立透明度设置；双击栏头折叠，单击展开并恢复展开状态。
+- **布局保存**：保存分栏、归属、标签页、折叠状态和位置，提供备份、快照与导入导出。
+- **恢复原生显示**：关闭原生整合或正常退出后恢复已收纳项目的原生显示；控制器失联或保护失效时，组件停止隐藏项目，让 Windows 桌面继续可用。
+- **文件夹映射**：实时只读浏览文件夹；映射页不接受拖入，也不允许拖出文件，不改变文件夹内容。
+- **登录后自动运行**：保留“开机自动运行，并恢复上次布局”设置，后台启动到托盘并读取保存的布局。本轮未进行 Windows 重启后的启动验收。
 
-![桌面分栏](docs/images/panel.png)
-
-## v0.2 历史实现
-
-- **桌面与分栏双向拖拽**：开启桌面接管后，拖入即收纳，拖出即回到桌面；同一图标不会同时在桌面和普通分栏中显示。
-- **原文件保留**：改变显示归属，不搬动、删除或覆盖文件。公共桌面快捷方式也能收纳。
-- **高清图标**：使用 Windows Shell Image Factory，按屏幕 DPI 请求高分辨率图标，保留原生像素，由 WPF 高质量缩放。
-- **轻量分栏**：紧凑栏头、透明背景、标签页、搜索、自由移动和缩放。图标大小、展开与折叠不透明度均可设置。
-- **双击折叠、单击展开**：折叠后只保留更透明的栏头；展开恢复原高度和透明度。
-- **登录 Windows 后自动运行**：可选启用，后台启动到托盘，恢复图标归属、位置、标签页及折叠状态。
-- **布局恢复**：原子保存、上一版备份、快照、导入导出，兼容迁移 v0.1 布局。
-- **退出恢复**：正常退出恢复 Windows 原生图标；独立守护进程在应用异常结束后执行同样的恢复。
-- **文件夹映射**：只读浏览实时文件夹，支持 FileSystemWatcher 刷新。
-
-本项目没有与 Fences 的完整功能等价保证；采用自有桌面显示层，不注入 Explorer，也不依赖 Stardock 软件。
+这里的“隐藏”是绘制和交互归属的调整。项目仍保留在 Windows Shell 的桌面视图与
+文件系统中，资源管理器的桌面文件夹仍能看到对应文件。
 
 ## 下载与运行
 
-目标平台：Windows 10/11 x64。便携包内置 .NET 运行时，无需另外安装 .NET，也不需要管理员权限。
+当前原生发行目标为 **Windows 11 x64**，不提供 ARM64 原生发行包。
+便携包包含 .NET 运行时，运行时无需安装 SDK 或 C++ 编译器。
 
-1. 在 [GitHub Actions](https://github.com/Alan-R-Lee/OpenFenestra/actions) 下载 `OpenFenestra-win-x64` 产物并解压。
-2. 运行 `OpenFenestra.exe`。
-3. 创建分栏并通过栏头菜单添加标签页；当前原生整合仍在研发，请保持“桌面接管”关闭。
-4. 如需自动启动，勾选“开机自动运行，并恢复上次布局”。
+1. 从 [GitHub Actions](https://github.com/Alan-R-Lee/OpenFenestra/actions) 下载 `OpenFenestra-win-x64` 产物并完整解压。
+2. 运行 `OpenFenestra.exe`，创建或恢复分栏。
+3. 在设置中开启“原生桌面整合（实验）：收纳后不重复显示图标”，再将原生桌面图标拖入普通分栏。
+4. 如需登录后使用，保留或勾选“开机自动运行，并恢复上次布局”。
 
-默认配置位于 `%LOCALAPPDATA%\OpenFenestra`。关闭管理窗口只收起到托盘，右键托盘可退出或恢复原生桌面。
+请保留 EXE 旁的 `FenestraShellBridge.dll`、`licenses` 和 `docs` 目录。
+原生组件和对应的 runtime notices 是发行包的一部分。
 
-`Ctrl+Alt+Space` 置顶速览分栏，再按一次取消置顶。
+关闭管理窗口会收起到托盘；通过托盘菜单可退出应用或恢复 Windows 原生桌面图标。
+`Ctrl+Alt+Space` 用于置顶速览分栏，再按一次取消置顶。
 
-## 便携与可选安装
+## 便携、配置与安装
 
-程序没有写死盘符、用户名或桌面位置。桌面路径和显示器信息在运行时读取。
+程序在运行时读取桌面路径与显示器信息，不依赖固定盘符或用户名。
 
 ```powershell
-# 真正的目录便携模式：配置保存在程序旁的 data 目录
+# 配置保存在程序旁的 data 目录
 .\OpenFenestra.exe --portable
 
-# 或在 EXE 旁创建名为 portable.mode 的空文件，再正常启动
+# 也可在 EXE 旁创建 portable.mode 空文件，再正常启动
 
-# 指定独立配置目录
+# 显式指定配置目录
 .\OpenFenestra.exe --data-dir "D:\OpenFenestra-Test"
 
 # 后台启动到托盘
 .\OpenFenestra.exe --tray
 ```
 
-便携模式可整目录复制到另一台 Windows 电脑。布局中的外部文件路径仍指向原文件；迁移电脑后应重新选择失效的文件或文件夹。
+普通用户环境默认将配置保存在 `%LOCALAPPDATA%\OpenFenestra`。
+MSIX 等打包宿主可能重定向 AppData；可使用 `--data-dir` 明确配置位置。
+整目录迁移便携包时，布局中的外部文件路径仍指向原文件，需要重新选择迁移后失效的路径。
 
-可选安装脚本把已构建程序复制到当前用户的固定程序目录。开机启动仅在显式启用时写入当前用户的 Run 项，不创建服务或计划任务：
+可选安装脚本将程序复制到当前用户的程序目录，支持通过 `-Destination` 指定位置：
 
 ```powershell
 .\scripts\build.ps1
-.\scripts\install.ps1 -StartWithWindows
+.\scripts\install.ps1 -StartWithWindows -DesktopIntegration
 ```
 
-更新安装目录前请通过托盘退出应用。程序与用户布局分开保存，替换 EXE 不需要删除配置。
+开机启动在启用后写入当前用户的 Run 项，不创建服务或计划任务。
+安装位置和 Run 项中的程序路径应在实际安装环境中核对；当前开发宿主存在 AppData
+重定向情况，不能据此宣称已通过重启验收。开机启动指当前用户登录后运行。
+
+更新前关闭原生整合并通过托盘退出应用；安装脚本检测到 DLL 仍被占用时会停止更新。
+用户布局与程序分开保存，更新程序不需要删除配置。
 
 ## 从源码构建
 
-在 Windows 安装 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)：
+需要 Windows x64、[.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)，
+以及以下任一 C++ 工具链：
+
+- Visual Studio / Build Tools 的 MSVC x64 C++ 工具与 Windows SDK；脚本通过 `vswhere` 查找。
+- MSYS2 UCRT64 的 MinGW-w64 `g++`，将其 `bin` 加入 `PATH`；也可向原生构建脚本传入 `-CompilerPath`。
 
 ```powershell
-dotnet build OpenFenestra.sln -c Release
-.\scripts\test.ps1
-.\scripts\build.ps1
+# 原生组件及隔离测试，不接入真实 Explorer
+.\scripts\build-native.ps1 -SelfTest
 
-# Windows ARM64 交叉构建；尚未在本机验证 ARM64 运行
-.\scripts\build.ps1 -Runtime win-arm64
+# 普通构建自动增量构建并复制原生 DLL 和 runtime notices
+dotnet build OpenFenestra.sln -c Release
+
+# 核心与界面冒烟检查
+.\scripts\test.ps1
+
+# 构建含 .NET runtime 的 win-x64 便携 ZIP
+.\scripts\build.ps1
 ```
 
-`scripts/test.ps1` 运行核心和 WPF 冒烟测试。`scripts/test-desktop.ps1` 是交互桌面测试：会短暂接管桌面，再验证正常及异常退出恢复；不要与另一个已开启接管的实例同时运行。
+`scripts/test-desktop.ps1` 是交互桌面检查：会临时接入真实 Explorer、使用专用测试项，
+并验证正常退出与故意结束测试控制器后的恢复。运行时应关闭其他 OpenFenestra 原生整合实例。
+隔离原生测试和真实桌面检查的范围见[验证说明](docs/TESTING.md)。
 
-## 桌面接管的行为
+MinGW 构建使用静态 GCC/C++ runtime，并复制当前工具链的完整许可证。
+非标准许可目录可通过 `OPENFENESTRA_MINGW_LICENSE_ROOT` 指定，详见
+[原生 runtime notices](docs/licenses/native-runtime/README.md)。MSVC 与 MinGW 的
+许可材料分别记录，生成的 `licenses/native-runtime/build-info.json` 标明实际编译器和哈希。
 
-接管期间，Explorer 原生图标列表临时隐藏，自有图标层显示未收纳项目，分栏显示已收纳项目。图标原文件一直保留；普通文件和公共桌面的快捷方式都不需要转移到私有文件夹。
-
-从其他文件夹拖入分栏时保存引用；拖出到接管桌面时作为桌面引用显示，不复制文件内容。退出后恢复原生显示，原本就在 Windows 桌面的图标重新出现；外部文件引用仍由本应用的布局保存。
-
-文件夹映射页是独立的只读目录视图，不参与普通分栏的排他归属。退出前及异常恢复守护进程均使用原来的图标可见状态，不修改“显示桌面图标”的持久系统设置。
+v0.3 的原生组件仅支持 x64，`scripts/build.ps1 -Runtime win-arm64` 会明确拒绝。
+用于管理界面或核心开发的纯托管构建可使用 `-p:EnableNativeShellBridge=false`；
+该构建不包含原生桌面整合能力。
 
 ## 当前边界
 
-- 不包含 Fences 的所有高级功能，例如桌面分页、自定义脚本、完整 Shell 上下文菜单和企业部署。
-- 原生图标与其他桌面增强软件的共存、Explorer 重启、虚拟桌面和混合 DPI 多显示器仍需更多设备验证。
-- 图标清晰度受原软件提供的图标素材限制；旧应用只有小尺寸图标时无法生成不存在的细节。
-- 单页最多保存 10,000 项，分栏最多显示搜索结果前 300 项，接管桌面最多显示 1,000 项。
-- 开机运行指登录当前 Windows 用户后启动；不会在 Windows 登录界面或其他用户会话中运行。
+- 分栏跨 Windows 虚拟桌面的固定适配器已接入；它使用非公开 Shell 接口，实际虚拟桌面切换尚未验收，不能视为已验证的跨桌面兼容性。
+- 本机真实桌面检查已通过，更多 Windows 版本、混合 DPI、多显示器热插拔、Explorer 重启及其他桌面增强软件共存仍需验证。
+- 已收纳项目的原坐标处会拒绝外部文件投递，避免文件误投到已隐藏的原生目标。
+- 不包含 Fences 的全部高级功能，例如桌面分页、自定义脚本、完整 Shell 上下文菜单和企业部署。
+- 图标细节受原应用提供的素材限制；只有低分辨率图标的应用无法凭空获得更多细节。
+- 单页最多保存 10,000 项，分栏最多显示搜索结果前 300 项；可以通过搜索缩小范围。
 
 ## 文档与许可证
 
 [调研记录](docs/RESEARCH.md) · [原生桌面专项研究](docs/NATIVE_DESKTOP_RESEARCH.md) · [架构](docs/ARCHITECTURE.md) · [验证说明](docs/TESTING.md) · [第三方说明](THIRD_PARTY_NOTICES.md)
 
-[MIT](LICENSE) © 2026 Alan-R-Lee and contributors. 本项目与 Stardock 无隶属或合作关系，不包含其源码、二进制文件、图片或授权数据。
+调研文档保留各研发阶段的方案和判断；当前实现与验证范围以本版说明和验证文档为准。
+
+[MIT](LICENSE) © 2026 Alan-R-Lee and contributors。应用及原生桥接源码独立开发，
+不依赖 Stardock 软件；不包含其源码、二进制文件、图片或授权数据。
+OpenFenestra 与 Stardock 无隶属或合作关系。

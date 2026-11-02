@@ -20,6 +20,7 @@ internal static class NativeDesktop
     [DllImport("user32.dll")] private static extern bool GetWindowRect(nint hwnd, out NativeRect rect);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(nint hwnd, System.Text.StringBuilder text, int count);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern nint GetWindowLong(nint hwnd, int index);
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)] private static extern nint SetWindowLong(nint hwnd, int index, nint value);
     [DllImport("user32.dll")] private static extern bool ShowWindow(nint hwnd, int command);
     [DllImport("user32.dll")] private static extern bool InvalidateRect(nint hwnd, nint rect, bool erase);
     [DllImport("user32.dll")] private static extern bool IsWindow(nint hwnd);
@@ -54,6 +55,17 @@ internal static class NativeDesktop
         return view == 0 ? 0 : FindWindowEx(view, 0, "SysListView32", null);
     }
     internal static bool HasVisibleStyle(nint hwnd) => hwnd != 0 && ((long)GetWindowLong(hwnd, -16) & 0x10000000) != 0;
+    internal static object Diagnostics()
+    {
+        var host = FindHost(); var view = FindWindowEx(host, 0, "SHELLDLL_DefView", null); var list = IconList();
+        string Class(nint handle) { var value = new System.Text.StringBuilder(128); GetClassName(handle, value, value.Capacity); return value.ToString(); }
+        var hostThread = GetWindowThreadProcessId(host, out var hostProcess);
+        var viewThread = GetWindowThreadProcessId(view, out var viewProcess);
+        var listThread = GetWindowThreadProcessId(list, out var listProcess);
+        return new { host = host.ToInt64(), hostClass = Class(host), hostThread, hostProcess,
+            view = view.ToInt64(), viewClass = Class(view), viewThread, viewProcess,
+            list = list.ToInt64(), listClass = Class(list), listThread, listProcess };
+    }
     internal static bool SetNativeIconsVisible(bool visible)
     {
         var list = IconList();
@@ -66,6 +78,7 @@ internal static class NativeDesktop
     }
 
     internal static bool Anchor(Window window) => AnchorWindows([window]);
+    internal static bool IsDesktopOwned(Window window) => GetWindow(new WindowInteropHelper(window).Handle, 4) == FindHost();
 
     internal static bool AnchorWindows(IEnumerable<Window> topToBottom)
     {
@@ -83,6 +96,9 @@ internal static class NativeDesktop
         var success = true;
         foreach (var handle in handles)
         {
+            // An owned popup belongs to the desktop's window family. This is
+            // ownership, not cross-process SetParent or a replacement canvas.
+            if (GetWindow(handle, 4) != host) SetWindowLong(handle, -8, host);
             success &= SetWindowPos(handle, above, 0, 0, 0, 0, PositionFlags);
             above = handle;
         }

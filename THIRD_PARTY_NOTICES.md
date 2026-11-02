@@ -10,8 +10,36 @@ No Stardock source or assets are included.
 identifiers and the PinView sequence from [MScholtes/VirtualDesktop](https://github.com/MScholtes/VirtualDesktop/blob/a725cbd3cdb9e977678eeaf034a7cc96d2e74bc6/VirtualDesktop11-24H2.cs),
 copyright (c) 2017 Markus Scholtes, under the MIT License. The complete upstream
 license is retained in that source file and in [docs/licenses/VirtualDesktop-MIT.txt](docs/licenses/VirtualDesktop-MIT.txt),
-which is included in published packages. The adapter is not yet connected to the
-application's window lifecycle.
+which is included in published packages. The adapter is used for the
+application's fence-window lifecycle.
+
+## Native compiler runtimes
+
+`FenestraShellBridge.dll` is original MIT-licensed application code compiled with
+either MSVC or MinGW-w64 GCC. Compiler runtime code linked into the DLL keeps its
+own license; it is not relicensed by the application's MIT license.
+
+MinGW builds statically link GCC libgcc/libstdc++ runtime portions and
+MinGW-w64 runtime/winpthreads portions. The GCC components are
+GPL-3.0-or-later **WITH GCC Runtime Library Exception 3.1**. The exception permits
+eligible compiled combinations with independent modules to be distributed under
+the terms of those modules; it does not require the independent OpenFenestra
+application source to change from MIT. The complete GPL text is always paired
+with the complete exception. The full MinGW-w64 CRT/runtime and winpthreads
+copyright, permission, and disclaimer texts are retained as well.
+
+MSVC builds use `/MT` and carry the complete Microsoft C++ Standard Library
+Apache-2.0-with-LLVM-Exception license and component notices. Other Microsoft
+compiler/CRT rights remain governed by the Visual Studio installation's terms.
+MinGW runtime notices do not apply to an MSVC-produced bridge.
+
+Verbatim reference materials, source versions, and hashes are under
+[docs/licenses/native-runtime](docs/licenses/native-runtime/README.md). The native
+build also generates `licenses/native-runtime/build-info.json` beside its DLL
+and copies the selected compiler's notices there. That generated directory is
+included in the application build and portable package so its `compilerFamily`
+and hashes identify the materials for the actual binary. Preserve the licenses,
+exception, notices, and build information when redistributing the package.
 
 ## Research references
 

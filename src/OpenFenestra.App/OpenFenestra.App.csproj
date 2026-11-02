@@ -7,8 +7,48 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>../../assets/OpenFenestra.ico</ApplicationIcon>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <AssemblyName>OpenFenestra</AssemblyName>
+    <EnableNativeShellBridge Condition="'$(EnableNativeShellBridge)' == ''">true</EnableNativeShellBridge>
+    <PlatformTarget Condition="'$(EnableNativeShellBridge)' == 'true' and ('$(RuntimeIdentifier)' == '' or '$(RuntimeIdentifier)' == 'win-x64') and ('$(PlatformTarget)' == '' or '$(PlatformTarget)' == 'AnyCPU')">x64</PlatformTarget>
+    <NativeShellCompiler Condition="'$(NativeShellCompiler)' == ''">auto</NativeShellCompiler>
+    <NativeBuildPowerShell Condition="'$(NativeBuildPowerShell)' == ''">powershell.exe</NativeBuildPowerShell>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../OpenFenestra.Core/OpenFenestra.Core.csproj" /></ItemGroup>
+  <ItemGroup>
+    <_NativeShellBridgeInputs Include="../../native/ShellBridge/**/*.cpp;../../native/ShellBridge/**/*.h;../../native/ShellBridge/**/*.hpp;../../scripts/build-native.ps1;../../docs/licenses/native-runtime/**/*" />
+  </ItemGroup>
+  <Target Name="PrepareNativeShellBridge" Condition="'$(EnableNativeShellBridge)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <Error Condition="'$(OS)' != 'Windows_NT'" Text="Building the native desktop bridge requires Windows C++ tools. Use -p:EnableNativeShellBridge=false for a managed-only build." />
+    <Error Condition="('$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'win-x64') or ('$(PlatformTarget)' != '' and '$(PlatformTarget)' != 'AnyCPU' and '$(PlatformTarget)' != 'x64')" Text="The native desktop bridge currently supports Windows x64 only. Use -p:EnableNativeShellBridge=false for a managed-only build on another architecture." />
+    <PropertyGroup>
+      <NativeShellBridgeOutputDirectory Condition="'$(NativeShellBridgeOutputDirectory)' == ''">$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'native'))</NativeShellBridgeOutputDirectory>
+      <_NativeShellBridgeDll>$([MSBuild]::NormalizePath('$(NativeShellBridgeOutputDirectory)', 'FenestraShellBridge.dll'))</_NativeShellBridgeDll>
+      <_NativeShellRuntimeNotices>$([MSBuild]::NormalizePath('$(NativeShellBridgeOutputDirectory)', 'licenses', 'native-runtime'))</_NativeShellRuntimeNotices>
+      <_NativeShellCompilerPathArgument Condition="'$(NativeShellCompilerPath)' != ''">-CompilerPath &quot;$(NativeShellCompilerPath)&quot;</_NativeShellCompilerPathArgument>
+    </PropertyGroup>
+    <ItemGroup>
+      <!-- Remains beside the app: the bridge is explicitly loaded into Explorer. -->
+      <Content Include="$(_NativeShellBridgeDll)" Link="FenestraShellBridge.dll" TargetPath="FenestraShellBridge.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    </ItemGroup>
+  </Target>
+  <Target Name="BuildNativeShellBridge" BeforeTargets="PrepareForBuild;AssignTargetPaths"
+          DependsOnTargets="PrepareNativeShellBridge"
+          Condition="'$(EnableNativeShellBridge)' == 'true' and '$(DesignTimeBuild)' != 'true'"
+          Inputs="@(_NativeShellBridgeInputs)" Outputs="$(_NativeShellBridgeDll);$(_NativeShellRuntimeNotices)/build-info.json">
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)/../.."
+          Command="&quot;$(NativeBuildPowerShell)&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/../../scripts/build-native.ps1&quot; -OutputDirectory &quot;$(NativeShellBridgeOutputDirectory)&quot; -Compiler &quot;$(NativeShellCompiler)&quot; $(_NativeShellCompilerPathArgument)" />
+    <Error Condition="!Exists('$(_NativeShellBridgeDll)')" Text="The native desktop bridge build did not produce FenestraShellBridge.dll." />
+    <ItemGroup><FileWrites Include="$(NativeShellBridgeOutputDirectory)/*;$(_NativeShellRuntimeNotices)/**/*" /></ItemGroup>
+  </Target>
+  <Target Name="CollectNativeShellBridgeRuntimeNotices" BeforeTargets="AssignTargetPaths"
+          DependsOnTargets="BuildNativeShellBridge"
+          Condition="'$(EnableNativeShellBridge)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <Error Condition="!Exists('$(_NativeShellRuntimeNotices)/build-info.json')" Text="Native runtime build information is missing." />
+    <ItemGroup>
+      <!-- Enumerate after the native build; first builds start without this directory. -->
+      <_NativeRuntimeNoticeFiles Include="$(_NativeShellRuntimeNotices)/**/*" />
+      <Content Include="@(_NativeRuntimeNoticeFiles)" TargetPath="licenses/native-runtime/%(_NativeRuntimeNoticeFiles.RecursiveDir)%(_NativeRuntimeNoticeFiles.Filename)%(_NativeRuntimeNoticeFiles.Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    </ItemGroup>
+  </Target>
 </Project>
