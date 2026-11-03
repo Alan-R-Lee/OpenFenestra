@@ -7,6 +7,12 @@ namespace OpenFenestra.App;
 internal sealed record DesktopDrag(string[] Paths)
 {
     internal const string Format = "OpenFenestra.Items.v2";
+    internal static bool HasSupportedFormat(IDataObject data)
+    {
+        try { return data.GetDataPresent(Format, false) || data.GetDataPresent(ShellDataTransfer.Format, false) || data.GetDataPresent(DataFormats.FileDrop, false); }
+        catch (Exception error) when (error is ExternalException or ArgumentException or InvalidOperationException
+            or IOException or NotSupportedException or System.Security.SecurityException) { return false; }
+    }
     internal DataObject Data(bool includeFileDrop = true)
     {
         var data = new DataObject();

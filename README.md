@@ -7,7 +7,7 @@ An experimental Windows 11 desktop organizer with native Explorer integration, t
 [![Build](https://github.com/Alan-R-Lee/OpenFenestra/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/Alan-R-Lee/OpenFenestra/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**当前版本：v0.3.7 · 实验版 · Windows 11 x64**
+**当前版本：v0.3.8 · 实验版 · Windows 11 x64**
 
 ## 可以做什么
 
@@ -63,7 +63,7 @@ cd OpenFenestra
 
 欢迎报告问题、分享兼容性结果和提交小范围改进。请先阅读[贡献指南](CONTRIBUTING.md)；涉及漏洞或敏感数据的问题见[安全说明](SECURITY.md)。
 
-[使用](docs/USAGE.md) · [构建](docs/BUILDING.md) · [架构](docs/ARCHITECTURE.md) · [技术参考](docs/REFERENCES.md) · [发布](docs/RELEASING.md)
+[使用](docs/USAGE.md) · [构建](docs/BUILDING.md) · [架构](docs/ARCHITECTURE.md) · [技术参考](docs/REFERENCES.md) · [代码核查](docs/CODE_REVIEW.md) · [发布](docs/RELEASING.md)
 
 ## 许可证与致谢
 

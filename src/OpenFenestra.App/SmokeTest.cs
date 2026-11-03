@@ -88,6 +88,12 @@ internal static class SmokeTest
             var shellIcon = await Task.Run(() => ShellFiles.Icon(Environment.GetFolderPath(Environment.SpecialFolder.Windows) + @"\explorer.exe", 128)).WaitAsync(TimeSpan.FromSeconds(8));
             Trace("after high-resolution extraction");
             Check(shellIcon is System.Windows.Media.Imaging.BitmapSource { PixelWidth: >= 96 }, "高分辨率 Shell 图标提取", checks);
+            Check(ReferenceEquals(shellIcon, await ShellFiles.IconAsync(Environment.GetFolderPath(Environment.SpecialFolder.Windows) + @"\explorer.exe", 128)),
+                "异步图标请求复用已加载的高清图标", checks);
+            var cancelled = false;
+            try { await ShellFiles.IconAsync(note, 128, new System.Threading.CancellationToken(true)); }
+            catch (OperationCanceledException) { cancelled = true; }
+            Check(cancelled, "过期图标请求可以在进入 Shell 队列前取消", checks);
             var portal = new FenceTab { Name = "灵感资料", FolderPath = folder };
             group.Tabs.Add(portal); group.SelectedTabId = portal.Id; workspace.Notify();
             Check(((StackPanel)panel.FindName("Tabs")).Children.Count == 2, "标签页切换", checks);
@@ -140,8 +146,10 @@ internal static class SmokeTest
                 var loginPanel = loginWorkspace.Panels.Single();
                 Check(loginPanel.Model.Collapsed && loginPanel.Height == 34 && !loginWorkspace.Manager.IsVisible,
                     "登录启动时分栏直接折叠且管理窗口不弹出", checks);
+                Check(((ListBox)loginPanel.FindName("Items")).Items.Count == 0,
+                    "折叠启动不提前加载不可见的图标列表", checks);
                 loginPanel.HandleHeaderClick(1);
-                Check(!loginPanel.Model.Collapsed && loginPanel.Height == 370,
+                Check(!loginPanel.Model.Collapsed && loginPanel.Height == 370 && ((ListBox)loginPanel.FindName("Items")).Items.Count == 4,
                     "登录折叠后单击恢复原展开高度", checks);
             }
         }

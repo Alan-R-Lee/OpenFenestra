@@ -21,6 +21,21 @@ internal static class Program
         File.WriteAllText(fixture, contents);
         try
         {
+            Test("Drag-over checks formats without materializing or resolving Shell data", () =>
+            {
+                foreach (var format in new[] { DesktopDrag.Format, ShellDataTransfer.Format, DataFormats.FileDrop })
+                    Assert(DesktopDrag.HasSupportedFormat(new FormatOnlyData(format)));
+                Assert(!DesktopDrag.HasSupportedFormat(new FormatOnlyData("unsupported")));
+            });
+            Test("CIDA rejects hundreds of aliases into a long PIDL before repeated scanning", () =>
+            {
+                const int header = 4 + 301 * 4;
+                var bytes = new byte[header + 2 * 1024 * 1024];
+                WriteUInt32(bytes, 0, 300);
+                for (var i = 0; i <= 300; i++) WriteUInt32(bytes, 4 + i * 4, header);
+                for (var i = header; i < bytes.Length - 2; i += 2) BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(i), 2);
+                Assert(!ShellDataTransfer.TryGetPidlOffsets(bytes, out _));
+            });
             Test("CIDA accepts a desktop parent and one relative PIDL", () =>
                 Assert(Valid(EmptyCida(1))));
             Test("CIDA rejects an offset into its header", () =>
@@ -171,6 +186,22 @@ internal static class Program
             return data;
         }
         finally { Marshal.FreeCoTaskMem(item); }
+    }
+
+    private sealed class FormatOnlyData(string format) : IDataObject
+    {
+        public object GetData(string name, bool convert) => throw new InvalidOperationException("Drag-over must not request payloads.");
+        public object GetData(string name) => GetData(name, false);
+        public object GetData(Type type) => throw new InvalidOperationException();
+        public bool GetDataPresent(string name, bool convert) => name == format;
+        public bool GetDataPresent(string name) => name == format;
+        public bool GetDataPresent(Type type) => false;
+        public string[] GetFormats(bool convert) => [format];
+        public string[] GetFormats() => [format];
+        public void SetData(string name, object? data) => throw new NotSupportedException();
+        public void SetData(string name, object? data, bool convert) => throw new NotSupportedException();
+        public void SetData(Type type, object? data) => throw new NotSupportedException();
+        public void SetData(object? data) => throw new NotSupportedException();
     }
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]

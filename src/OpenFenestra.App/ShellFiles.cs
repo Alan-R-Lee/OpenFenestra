@@ -1,6 +1,9 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Threading;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using OpenFenestra.Core;
@@ -29,7 +32,8 @@ internal static class ShellFiles
     [DllImport("user32.dll")] private static extern bool DestroyIcon(nint icon);
     [DllImport("gdi32.dll")] private static extern bool DeleteObject(nint bitmap);
     private static readonly ConcurrentDictionary<string, ImageSource> Cache = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly ConcurrentDictionary<string, DesktopEntry> DesktopNames = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Queue<string> CacheOrder = new(); // Only accessed on the icon STA.
+    private static IReadOnlyDictionary<string, DesktopEntry> _desktopNames = new Dictionary<string, DesktopEntry>(StringComparer.OrdinalIgnoreCase);
     private static readonly Lazy<System.Windows.Threading.Dispatcher> IconDispatcher = new(() =>
     {
         System.Windows.Threading.Dispatcher? dispatcher = null;
@@ -42,12 +46,20 @@ internal static class ShellFiles
     });
 
     internal static ImageSource? Icon(string path, int pixels = 128)
-        => IconDispatcher.Value.Invoke(() => ExtractIcon(path, pixels));
+        => Cache.TryGetValue(IconKey(path, pixels), out var image) ? image : IconDispatcher.Value.Invoke(() => ExtractIcon(path, pixels));
+
+    internal static Task<ImageSource?> IconAsync(string path, int pixels = 128, CancellationToken cancellation = default)
+    {
+        if (cancellation.IsCancellationRequested) return Task.FromCanceled<ImageSource?>(cancellation);
+        if (Cache.TryGetValue(IconKey(path, pixels), out var image)) return Task.FromResult<ImageSource?>(image);
+        return IconDispatcher.Value.InvokeAsync(() => ExtractIcon(path, pixels), DispatcherPriority.Background, cancellation).Task;
+    }
+    private static string IconKey(string path, int pixels) => path + "|" + Math.Clamp(pixels, 48, 256);
 
     private static ImageSource? ExtractIcon(string path, int pixels)
     {
         pixels = Math.Clamp(pixels, 48, 256);
-        var key = path + "|" + pixels;
+        var key = IconKey(path, pixels);
         if (Cache.TryGetValue(key, out var cached)) return cached;
         ImageSource? image = null;
         IShellItemImageFactory? factory = null;
@@ -79,8 +91,11 @@ internal static class ShellFiles
                 finally { DestroyIcon(info.Icon); }
             }
         }
-        if (Cache.Count > 1500) Cache.Clear();
-        if (image is not null) Cache[key] = image;
+        if (image is not null && Cache.TryAdd(key, image))
+        {
+            CacheOrder.Enqueue(key);
+            while (CacheOrder.Count > 1500) Cache.TryRemove(CacheOrder.Dequeue(), out _);
+        }
         return image;
     }
 
@@ -89,11 +104,14 @@ internal static class ShellFiles
         // The desktop namespace also contains navigation entries which are not
         // shown on the desktop. Enumerate the actual Explorer view instead.
         var entries = NativeDesktopShell.ReadSnapshot().Items.Select(item => new DesktopEntry(item.Path, item.Name, item.IsFolder)).ToList();
-        foreach (var entry in entries) DesktopNames[entry.Path] = entry;
+        var names = new Dictionary<string, DesktopEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in entries) names[entry.Path] = entry;
+        Volatile.Write(ref _desktopNames, names);
         return entries;
     }
 
-    internal static DesktopEntry Entry(string path) => DesktopNames.TryGetValue(path, out var entry) ? entry : FileCatalog.Entry(path);
+    internal static DesktopEntry Entry(string path) => Volatile.Read(ref _desktopNames).TryGetValue(path, out var entry) ? entry : FileCatalog.Entry(path);
+    internal static DesktopEntry Entry(DesktopEntry entry) => Volatile.Read(ref _desktopNames).TryGetValue(entry.Path, out var named) ? named : entry;
 
     internal static void Open(string path)
     {

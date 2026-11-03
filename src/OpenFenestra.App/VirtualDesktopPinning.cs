@@ -57,11 +57,14 @@ internal static class VirtualDesktopPinning
     internal static bool TryPin(nint hwnd, out string? error)
         => WithView(hwnd, pin: true, out _, out error);
 
+    internal static bool TryUnpin(nint hwnd, out string? error)
+        => WithView(hwnd, pin: false, out _, out error);
+
     /// <summary>Returns false on probe failure, separately from an unpinned view.</summary>
     internal static bool TryIsPinned(nint hwnd, out bool pinned, out string? error)
-        => WithView(hwnd, pin: false, out pinned, out error);
+        => WithView(hwnd, pin: null, out pinned, out error);
 
-    private static bool WithView(nint hwnd, bool pin, out bool pinned, out string? error)
+    private static bool WithView(nint hwnd, bool? pin, out bool pinned, out string? error)
     {
         pinned = false;
         error = null;
@@ -117,13 +120,13 @@ internal static class VirtualDesktopPinning
                 Marshal.ThrowExceptionForHR(shell.QueryService(ref pinnedClass, ref pinnedId, out pinnedAppsService));
                 var pinnedApps = (IVirtualDesktopPinnedApps)pinnedAppsService;
                 Marshal.ThrowExceptionForHR(pinnedApps.IsViewPinned(view, out pinned));
-                if (pin && !pinned)
+                if (pin.HasValue && pinned != pin.Value)
                 {
-                    Marshal.ThrowExceptionForHR(pinnedApps.PinView(view));
+                    Marshal.ThrowExceptionForHR(pin.Value ? pinnedApps.PinView(view) : pinnedApps.UnpinView(view));
                     Marshal.ThrowExceptionForHR(pinnedApps.IsViewPinned(view, out pinned));
-                    if (!pinned)
+                    if (pinned != pin.Value)
                     {
-                        error = "Explorer did not retain the fence's virtual desktop pin.";
+                        error = "Explorer did not retain the requested virtual desktop pin state.";
                         return false;
                     }
                 }

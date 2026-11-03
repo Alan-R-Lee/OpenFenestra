@@ -9,13 +9,29 @@ internal static class StartupRegistration
 {
     internal const string ValueName = "OpenFenestra";
     private const string KeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private static string UserSid => WindowsIdentity.GetCurrent().User!.Value;
+    private static readonly Lazy<string> AccountSid = new(() =>
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        return identity.User!.Value;
+    });
+    private static string UserSid => AccountSid.Value;
     private static string TaskName => "OpenFenestra-" + UserSid;
-    private static string Executable => RuntimePaths.PhysicalFile(Environment.ProcessPath ?? throw new InvalidOperationException("无法确定程序安装位置。"));
+    private static readonly Lazy<string> ExecutablePath = new(() => RuntimePaths.PhysicalFile(Environment.ProcessPath ?? throw new InvalidOperationException("无法确定程序安装位置。")));
+    private static string Executable => ExecutablePath.Value;
+    private static bool? _cachedEnabled;
+    private static long _checkedAt;
     private static string Arguments => "--tray --autostart" + (App.HasCustomDataDirectory ? " --data-dir \"" + App.DataDirectory + "\"" : App.IsPortable ? " --portable" : "");
     internal static string? LastFallbackReason { get; private set; }
 
     internal static bool IsEnabled()
+    {
+        var now = Environment.TickCount64;
+        if (_cachedEnabled is { } cached && now - _checkedAt < 2000) return cached;
+        var enabled = ReadEnabled();
+        _cachedEnabled = enabled; _checkedAt = now;
+        return enabled;
+    }
+    private static bool ReadEnabled()
     {
         try { if (WithFolder(folder => TaskMatches(folder, Executable, Arguments))) return true; }
         catch (Exception e) when (SchedulerUnavailable(e)) { }
@@ -25,6 +41,7 @@ internal static class StartupRegistration
 
     internal static void SetEnabled(bool enabled)
     {
+        _cachedEnabled = null;
         LastFallbackReason = null;
         if (enabled)
         {

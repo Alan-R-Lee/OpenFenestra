@@ -19,6 +19,17 @@ internal static class DesktopIntegrationTest
             workspace.SetDesktopIntegration(true);
             await Task.Delay(250);
             Check(workspace.Desktop.Enabled && workspace.Desktop.Capabilities == 15, "绘制、选择、输入和 OLE 保护全部就绪", checks);
+            var panelHandle = new System.Windows.Interop.WindowInteropHelper(workspace.Panels.Single()).Handle;
+            if (VirtualDesktopPinning.TryIsPinned(panelHandle, out _, out _))
+            {
+                workspace.UpdateSettings(false, false); await Task.Delay(250);
+                Check(VirtualDesktopPinning.TryIsPinned(panelHandle, out var pinned, out _) && !pinned,
+                    "取消跨桌面设置后实际解除 PinView", checks);
+                workspace.UpdateSettings(true, false); await Task.Delay(250);
+                Check(VirtualDesktopPinning.TryIsPinned(panelHandle, out pinned, out _) && pinned,
+                    "重新启用跨桌面设置后实际恢复 PinView", checks);
+            }
+            else checks.Add("SKIP: 当前 Shell 不支持固定状态查询，跨桌面开关需另行验收");
             Check(NativeDesktop.HasVisibleStyle(NativeDesktop.IconList()) == before, "Explorer 原生图标列表保持原可见状态", checks);
             Check(Application.Current.Windows.Cast<Window>().All(w => !w.Title.EndsWith("· 桌面图标", StringComparison.Ordinal)), "没有全屏桌面图标替代窗口", checks);
             var source = original.Items.FirstOrDefault(i => File.Exists(i.Path) && Path.GetExtension(i.Path).Equals(".lnk", StringComparison.OrdinalIgnoreCase))

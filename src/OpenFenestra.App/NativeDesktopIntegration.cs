@@ -11,6 +11,7 @@ internal sealed class DesktopIntegration(WorkspaceController workspace) : IDispo
     private NativeShellBridgeClient? _bridge;
     private bool _ownsLease;
     private DateTime _retryAfter;
+    private HashSet<string>? _lastAssignments;
     internal bool Enabled => _bridge?.Connected == true;
     internal int HiddenCount => _bridge?.HiddenCount ?? 0;
     internal uint Capabilities => _bridge?.Capabilities ?? 0;
@@ -30,7 +31,11 @@ internal sealed class DesktopIntegration(WorkspaceController workspace) : IDispo
     }
     internal void Refresh()
     {
-        if (Enabled) _bridge!.Update(DesktopAssignments.Assigned(workspace.Layout));
+        if (!Enabled) return;
+        var assigned = DesktopAssignments.Assigned(workspace.Layout);
+        if (_lastAssignments is not null && _lastAssignments.SetEquals(assigned)) return;
+        _bridge!.Update(assigned);
+        _lastAssignments = assigned;
     }
     internal void Tick()
     {
@@ -51,6 +56,7 @@ internal sealed class DesktopIntegration(WorkspaceController workspace) : IDispo
     public void Dispose()
     {
         _bridge?.Dispose(); _bridge = null;
+        _lastAssignments = null;
         if (_lease is not null)
         {
             if (_ownsLease) _lease.ReleaseMutex();

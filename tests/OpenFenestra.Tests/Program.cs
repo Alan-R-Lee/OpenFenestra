@@ -19,6 +19,56 @@ var image = Path.Combine(source, "Image.png"); File.WriteAllText(image, "fixture
 var folder = Path.Combine(source, "Folder"); Directory.CreateDirectory(folder);
 try
 {
+    Test("Batch collection preserves input order, unrelated items and read-only portals", () =>
+    {
+        var items = Enumerable.Range(1, 10000).Select(i => "::{" + new Guid(i, 0, 0, new byte[8]).ToString("D").ToUpperInvariant() + "}").ToArray();
+        var a = new FenceGroup(); var b = new FenceGroup(); var portal = new FenceTab { FolderPath = source, Items = items.ToList() };
+        a.ActiveTab.Items.AddRange(items); a.Tabs.Add(portal);
+        var layout = new Layout { Groups = [a, b], DesktopItems = items.ToList() };
+        Assert(DesktopAssignments.Collect(layout, b.ActiveTab, items.Reverse().Concat(items.Take(10))) == items.Length);
+        Assert(b.ActiveTab.Items.SequenceEqual(items.Reverse()) && a.ActiveTab.Items.Count == 0 && layout.DesktopItems.Count == 0);
+        Assert(portal.Items.SequenceEqual(items));
+        Assert(DesktopAssignments.ReturnToDesktop(layout, items, new(1, 2)) == items.Length);
+        Assert(b.ActiveTab.Items.Count == 0 && layout.DesktopItems.SequenceEqual(items) && portal.Items.SequenceEqual(items));
+    });
+    Test("Capacity errors leave all source assignments and desktop positions unchanged", () =>
+    {
+        var full = Enumerable.Range(1, 10000).Select(i => "::{" + new Guid(i, 0, 0, new byte[8]).ToString("D") + "}").ToList();
+        var a = new FenceGroup(); var b = new FenceGroup(); a.ActiveTab.Items.Add(doc); b.ActiveTab.Items.AddRange(full);
+        var layout = new Layout { Groups = [a, b] };
+        var before = LayoutCodec.Encode(layout);
+        Throws(() => DesktopAssignments.Collect(layout, b.ActiveTab, [doc]));
+        Assert(LayoutCodec.Encode(layout) == before);
+        layout.DesktopItems.AddRange(full); before = LayoutCodec.Encode(layout);
+        Throws(() => DesktopAssignments.ReturnToDesktop(layout, [doc], new(1, 2)));
+        Assert(LayoutCodec.Encode(layout) == before);
+    });
+    Test("Virtual Shell identities require a valid GUID with exact separators", () =>
+    {
+        Assert(!DesktopAssignments.IsVirtual(null));
+        Assert(!DesktopAssignments.IsVirtual("::{" + new string('A', 36) + "}"));
+        Assert(!DesktopAssignments.IsVirtual("::{" + new string('-', 36) + "}"));
+        Assert(DesktopAssignments.NormalizeItem("::{" + new string('-', 36) + "}") is null);
+        Assert(DesktopAssignments.IsVirtual("::{645ff040-5081-101b-9f08-00aa002f954e}"));
+    });
+    Test("Folder metadata keeps directories first and shortcut display names intact", () =>
+    {
+        var entries = FileCatalog.ReadTab(new FenceTab { FolderPath = source });
+        Assert(entries[0].Path == folder && entries[0].IsDirectory);
+        Assert(entries.Single(e => e.Path == link).Name == "App" && !entries.Single(e => e.Path == link).IsDirectory);
+    });
+    Test("Organization fills eligible category tabs in order and skips folder portals", () =>
+    {
+        var paths = Enumerable.Range(1, 10002).Select(i => "::{" + new Guid(i, 0, 0, new byte[8]).ToString("D").ToUpperInvariant() + "}").ToArray();
+        var portal = new FenceGroup { Name = "系统入口", Tabs = [new() { FolderPath = source }] };
+        var nearlyFull = new FenceGroup { Name = "系统入口" }; nearlyFull.ActiveTab.Items.AddRange(paths.Take(9999));
+        var next = new FenceGroup { Name = "系统入口" };
+        var layout = new Layout { Groups = [portal, nearlyFull, next] };
+        Assert(FileCatalog.OrganizeEntries(layout, paths.Skip(9999).Select(p => new DesktopEntry(p, p, false))) == 3);
+        Assert(layout.Groups.Count == 3 && portal.ActiveTab.Items.Count == 0);
+        Assert(nearlyFull.ActiveTab.Items.Count == 10000 && nearlyFull.ActiveTab.Items[^1] == paths[9999]);
+        Assert(next.ActiveTab.Items.SequenceEqual(paths.Skip(10000)));
+    });
     Test("Groups can move upward and downward before or after a target", () =>
     {
         var groups = new[] { "A", "B", "C", "D" }.Select(name => new FenceGroup { Id = name, Name = name }).ToList();

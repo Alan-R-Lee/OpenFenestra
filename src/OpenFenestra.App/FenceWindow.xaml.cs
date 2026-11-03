@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Threading.Tasks;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -35,6 +34,7 @@ public partial class FenceWindow : Window
     private bool _ready, _closing, _applyingGeometry;
     private Point _dragStart;
     private int _generation;
+    private System.Threading.CancellationTokenSource? _iconLoad;
     private bool _headerArmed, _searchVisible;
     private Point _headerStart;
     private DateTime _expandedAt;
@@ -150,10 +150,14 @@ public partial class FenceWindow : Window
     {
         // Populate after Loaded, avoiding duplicate Shell icon work during construction.
         if (!_ready || _closing) return;
+        _iconLoad?.Cancel(); _iconLoad?.Dispose();
+        _iconLoad = null;
         var generation = ++_generation;
+        if (Model.Collapsed) return;
+        var load = _iconLoad = new System.Threading.CancellationTokenSource();
         var tab = Model.ActiveTab;
         var search = Search.Text.Trim();
-        var entries = FileCatalog.ReadTab(tab).Select(e => ShellFiles.Entry(e.Path)).Where(e => e.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase)).ToList();
+        var entries = FileCatalog.ReadTab(tab).Select(ShellFiles.Entry).Where(e => e.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase)).ToList();
         var views = entries.Take(300).Select(e => new EntryView(e, Model.IconSize)).ToArray();
         Items.ItemsSource = views;
         Empty.Text = tab.IsPortal && !Directory.Exists(tab.FolderPath) ? "文件夹暂不可用\n请检查路径或网络连接" : search.Length > 0 ? "没有匹配的项目" : tab.IsPortal ? "这个文件夹还没有项目" : "把文件、文件夹或快捷方式拖到这里\n从这里开始整理桌面";
@@ -161,14 +165,15 @@ public partial class FenceWindow : Window
         Footnote.Text = $"{entries.Count} 个项目" + (entries.Count > 300 ? " · 仅显示前 300 项，请搜索缩小范围" : tab.IsPortal ? " · 文件夹映射 · 只读浏览" : " · 文件引用");
         try
         {
+            var pixels = Math.Clamp((int)Math.Ceiling(Model.IconSize * VisualTreeHelper.GetDpi(this).DpiScaleX * 2), 96, 256);
             foreach (var view in views)
             {
-                var pixels = Math.Clamp((int)Math.Ceiling(Model.IconSize * VisualTreeHelper.GetDpi(this).DpiScaleX * 2), 96, 256);
-                var icon = await Task.Run(() => ShellFiles.Icon(view.Path, pixels));
+                var icon = await ShellFiles.IconAsync(view.Path, pixels, load.Token);
                 if (generation != _generation || _closing) return;
                 view.Icon = icon;
             }
         }
+        catch (OperationCanceledException) when (load.IsCancellationRequested) { }
         catch (Exception error) { _workspace.Report(error); }
     }
     private void OnSearchChanged(object sender, TextChangedEventArgs e) { if (Items is not null) RefreshItems(); }
@@ -251,12 +256,13 @@ public partial class FenceWindow : Window
     }
     private void OnDragOver(object sender, DragEventArgs e)
     {
-        e.Effects = !Model.ActiveTab.IsPortal && DesktopDrag.Read(e.Data).Length > 0 ? DragDropEffects.Link : DragDropEffects.None;
+        e.Effects = !Model.ActiveTab.IsPortal && DesktopDrag.HasSupportedFormat(e.Data) ? DragDropEffects.Link : DragDropEffects.None;
         e.Handled = true;
     }
     private void OnDrop(object sender, DragEventArgs e)
     {
         e.Handled = true;
+        e.Effects = DragDropEffects.None;
         if (Model.ActiveTab.IsPortal) return;
         var files = DesktopDrag.Read(e.Data);
         if (files.Length == 0) return;
@@ -319,7 +325,7 @@ public partial class FenceWindow : Window
         var point = PointToScreen(new Point(Width + 20, 50));
         _workspace.ReturnToDesktop([path], new(point.X, point.Y));
     }
-    internal void DisposePanel() { _closing = true; _generation++; _refresh.Stop(); _watcher?.Dispose(); _hwndSource?.RemoveHook(OnNativeMessage); Close(); }
+    internal void DisposePanel() { _closing = true; _generation++; _iconLoad?.Cancel(); _iconLoad?.Dispose(); _refresh.Stop(); _watcher?.Dispose(); _hwndSource?.RemoveHook(OnNativeMessage); Close(); }
     internal static SolidColorBrush Brush(string hex, double opacity = 1) => new((Color)ColorConverter.ConvertFromString(hex)) { Opacity = opacity };
     private static void AddMenu(ContextMenu menu, string title, Action action)
     { var item = new MenuItem { Header = title }; item.Click += (_, _) => action(); menu.Items.Add(item); }

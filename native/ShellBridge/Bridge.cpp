@@ -233,10 +233,23 @@ void ClearHiddenSelection() {
     state.clearing = true;
     LVITEMW item{};
     item.stateMask = LVIS_SELECTED | LVIS_FOCUSED;
-    for (size_t i = 0; i < state.hidden.size(); ++i) {
-        if (state.hidden[i]) SendMessageW(state.list, LVM_SETITEMSTATE,
-            static_cast<WPARAM>(i), reinterpret_cast<LPARAM>(&item));
+    // Most mouse messages arrive with no selection to repair. Enumerate actual
+    // selections, not every hidden icon, while bypassing our own filtered query.
+    int previous = -1;
+    for (size_t attempt = 0; attempt < state.hidden.size(); ++attempt) {
+        int selected;
+        { RawQueryScope raw; selected = static_cast<int>(SendMessageW(state.list,
+            LVM_GETNEXTITEM, static_cast<WPARAM>(previous), LVNI_SELECTED)); }
+        if (selected <= previous || selected < 0) break;
+        previous = selected;
+        if (Hidden(selected)) SendMessageW(state.list, LVM_SETITEMSTATE,
+            static_cast<WPARAM>(selected), reinterpret_cast<LPARAM>(&item));
     }
+    int focused;
+    { RawQueryScope raw; focused = static_cast<int>(SendMessageW(state.list,
+        LVM_GETNEXTITEM, static_cast<WPARAM>(-1), LVNI_FOCUSED)); }
+    if (Hidden(focused)) SendMessageW(state.list, LVM_SETITEMSTATE,
+        static_cast<WPARAM>(focused), reinterpret_cast<LPARAM>(&item));
     state.clearing = false;
 }
 

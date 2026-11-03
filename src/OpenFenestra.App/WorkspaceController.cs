@@ -21,6 +21,7 @@ internal sealed class WorkspaceController : IDisposable
     private Forms.NotifyIcon? _tray;
     private HwndSource? _source;
     private bool _disposed;
+    private bool _anchorQueued;
     private bool _peeking;
     private readonly Dictionary<nint, string> _pinErrors = [];
     private readonly HashSet<nint> _pinnedPanels = [];
@@ -189,16 +190,34 @@ internal sealed class WorkspaceController : IDisposable
     }
     internal void ApplyDesktopZOrder()
     {
-        if (!Layout.PinToDesktop && !_desktop.Enabled) return;
+        if (_disposed || _anchorQueued) return;
+        _anchorQueued = true;
+        Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            _anchorQueued = false;
+            if (!_disposed) ApplyDesktopZOrderCore();
+        }));
+    }
+    private void ApplyDesktopZOrderCore()
+    {
+        if (!Layout.PinToDesktop && !_desktop.Enabled && _pinnedPanels.Count == 0) return;
         var windows = _panels.Values.Where(p => p.IsVisible && !p.Topmost).Cast<Window>().ToArray();
-        NativeDesktop.AnchorWindows(windows);
+        if (Layout.PinToDesktop || _desktop.Enabled) NativeDesktop.AnchorWindows(windows);
+        var pinsChanged = false;
         foreach (var panel in windows)
         {
             var handle = new WindowInteropHelper(panel).Handle;
-            if (VirtualDesktopPinning.TryPin(handle, out var error)) { _pinErrors.Remove(handle); _pinnedPanels.Add(handle); }
+            if (!Layout.PinToDesktop && !_pinnedPanels.Contains(handle)) continue;
+            var success = Layout.PinToDesktop ? VirtualDesktopPinning.TryPin(handle, out var error) : VirtualDesktopPinning.TryUnpin(handle, out error);
+            if (success)
+            {
+                _pinErrors.Remove(handle);
+                pinsChanged |= Layout.PinToDesktop ? _pinnedPanels.Add(handle) : _pinnedPanels.Remove(handle);
+            }
             else if (error is not null && (!_pinErrors.TryGetValue(handle, out var previous) || previous != error))
-            { _pinnedPanels.Remove(handle); _pinErrors[handle] = error; Report(new InvalidOperationException(error)); }
+            { _pinErrors[handle] = error; Report(new InvalidOperationException(error)); }
         }
+        if (pinsChanged) ScheduleSave();
     }
     internal void Collect(FenceTab tab, IEnumerable<string> paths)
     {
@@ -383,8 +402,13 @@ internal sealed class WorkspaceController : IDisposable
 
     private void SyncPanels()
     {
-        foreach (var obsolete in _panels.Keys.Where(k => Layout.Groups.All(g => g.Id != k)).ToArray())
-        { _panels[obsolete].DisposePanel(); _panels.Remove(obsolete); }
+        var groupIds = Layout.Groups.Select(g => g.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var obsolete in _panels.Keys.Where(k => !groupIds.Contains(k)).ToArray())
+        {
+            var handle = new WindowInteropHelper(_panels[obsolete]).Handle;
+            _pinnedPanels.Remove(handle); _pinErrors.Remove(handle);
+            _panels[obsolete].DisposePanel(); _panels.Remove(obsolete);
+        }
         foreach (var group in Layout.Groups)
         {
             if (!_panels.TryGetValue(group.Id, out var panel))
@@ -399,7 +423,7 @@ internal sealed class WorkspaceController : IDisposable
         var next = LayoutStore.Read(path);
         Store.Snapshot(Layout);
         foreach (var panel in Panels.ToArray()) panel.DisposePanel();
-        _panels.Clear(); Layout = next;
+        _panels.Clear(); _pinnedPanels.Clear(); _pinErrors.Clear(); Layout = next;
         ConfigureAutoOrganize(); ConfigureDesktopIntegration(); Notify("布局已恢复 · 恢复前的布局已自动保存为快照");
     }
 

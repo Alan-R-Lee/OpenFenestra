@@ -72,26 +72,29 @@ internal static class ShellDataTransfer
         if (headerBytes > bytes.Length) return false;
 
         var result = new int[(int)count + 1];
-        var ranges = new List<(int Start, int End)>();
         for (var i = 0; i < result.Length; i++)
         {
             var offset = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(4 + i * 4, 4));
             if (offset < headerBytes || offset > bytes.Length - 2) return false;
-            var cursor = (int)offset;
+            result[i] = (int)offset;
+        }
+        // Validate in address order with the next PIDL as a hard boundary.
+        // Duplicate/overlapping offsets cannot force repeated walks over a large
+        // attacker-controlled payload: total scanning is bounded by bytes.Length.
+        var ordered = result.Order().ToArray();
+        for (var i = 0; i < ordered.Length; i++)
+        {
+            var cursor = ordered[i];
+            var limit = i + 1 < ordered.Length ? ordered[i + 1] : bytes.Length;
             while (true)
             {
-                if (cursor > bytes.Length - 2) return false;
+                if (cursor > limit - 2) return false;
                 var size = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(cursor, 2));
                 if (size == 0) { cursor += 2; break; }
-                if (size < 2 || size > bytes.Length - cursor) return false;
+                if (size < 2 || size > limit - cursor) return false;
                 cursor += size;
             }
-            result[i] = (int)offset;
-            ranges.Add(((int)offset, cursor));
         }
-        var ordered = ranges.OrderBy(range => range.Start).ToArray();
-        for (var i = 1; i < ordered.Length; i++)
-            if (ordered[i].Start < ordered[i - 1].End) return false;
         offsets = result;
         return true;
     }
