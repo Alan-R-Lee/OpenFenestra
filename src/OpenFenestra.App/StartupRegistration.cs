@@ -12,7 +12,7 @@ internal static class StartupRegistration
     private static string UserSid => WindowsIdentity.GetCurrent().User!.Value;
     private static string TaskName => "OpenFenestra-" + UserSid;
     private static string Executable => RuntimePaths.PhysicalFile(Environment.ProcessPath ?? throw new InvalidOperationException("无法确定程序安装位置。"));
-    private static string Arguments => "--tray" + (App.HasCustomDataDirectory ? " --data-dir \"" + App.DataDirectory + "\"" : App.IsPortable ? " --portable" : "");
+    private static string Arguments => "--tray --autostart" + (App.HasCustomDataDirectory ? " --data-dir \"" + App.DataDirectory + "\"" : App.IsPortable ? " --portable" : "");
     internal static string? LastFallbackReason { get; private set; }
 
     internal static bool IsEnabled()

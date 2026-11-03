@@ -95,6 +95,17 @@ internal static class SmokeTest
             workspace.Layout.Groups[0].Name = "退出保存验证";
             workspace.ScheduleSave(); workspace.Dispose();
             Check(workspace.Store.Load().Groups[0].Name == "退出保存验证", "退出时立即保存待处理布局", checks);
+            using (var loginWorkspace = new WorkspaceController(workspace.Store))
+            {
+                loginWorkspace.Start(false, collapseOnStart: true);
+                await Task.Delay(250);
+                var loginPanel = loginWorkspace.Panels.Single();
+                Check(loginPanel.Model.Collapsed && loginPanel.Height == 34 && !loginWorkspace.Manager.IsVisible,
+                    "登录启动时分栏直接折叠且管理窗口不弹出", checks);
+                loginPanel.HandleHeaderClick(1);
+                Check(!loginPanel.Model.Collapsed && loginPanel.Height == 370,
+                    "登录折叠后单击恢复原展开高度", checks);
+            }
         }
         catch (Exception error) { workspace.Report(error); checks.Add("FAILED: " + error); exitCode = 1; }
         finally

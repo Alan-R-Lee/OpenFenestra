@@ -48,8 +48,12 @@ internal sealed class WorkspaceController : IDisposable
         };
     }
 
-    internal void Start(bool showManager)
+    internal void Start(bool showManager, bool collapseOnStart = false)
     {
+        // Apply before creating windows so expanded content never flashes at logon.
+        // Keep each group's expanded height for the user's next click.
+        if (collapseOnStart)
+            foreach (var group in Layout.Groups) group.Collapsed = true;
         var appIcon = Environment.ProcessPath is { } exe ? System.Drawing.Icon.ExtractAssociatedIcon(exe) : null;
         _tray = new Forms.NotifyIcon { Icon = appIcon ?? System.Drawing.SystemIcons.Application, Text = "OpenFenestra · 桌面，自有条理", Visible = true };
         var menu = new Forms.ContextMenuStrip();
@@ -341,6 +345,7 @@ internal sealed class WorkspaceController : IDisposable
                     executable = Environment.ProcessPath, nativeEnabled = _desktop.Enabled,
                     hiddenCount = _desktop.HiddenCount, nativeCapabilities = _desktop.Capabilities,
                     visiblePanels = Panels.Count(p => p.IsVisible),
+                    collapsedPanels = Panels.Count(p => p.IsVisible && p.Model.Collapsed),
                     desktopOwnedPanels = Panels.Count(p => NativeDesktop.IsDesktopOwned(p)),
                     pinnedPanels = Panels.Count(p => _pinnedPanels.Contains(new WindowInteropHelper(p).Handle)),
                     startupEnabled = StartupRegistration.IsEnabled(), updated = DateTimeOffset.Now };
