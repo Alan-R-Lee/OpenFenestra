@@ -16,6 +16,19 @@ public sealed class Layout
     public List<FenceGroup> Groups { get; set; } = [];
 
     public Layout Clone() => LayoutCodec.Decode(LayoutCodec.Encode(this));
+
+    public bool ReorderGroup(string sourceId, string targetId, bool insertAfter)
+    {
+        var source = Groups.FindIndex(g => g.Id == sourceId);
+        var target = Groups.FindIndex(g => g.Id == targetId);
+        if (source < 0 || target < 0 || source == target) return false;
+        var destination = target + (insertAfter ? 1 : 0);
+        if (source < destination) destination--;
+        if (destination == source) return false;
+        var group = Groups[source];
+        Groups.RemoveAt(source); Groups.Insert(destination, group);
+        return true;
+    }
 }
 
 public sealed class UnsupportedLayoutVersionException(int version)

@@ -19,6 +19,49 @@ var image = Path.Combine(source, "Image.png"); File.WriteAllText(image, "fixture
 var folder = Path.Combine(source, "Folder"); Directory.CreateDirectory(folder);
 try
 {
+    Test("Groups can move upward and downward before or after a target", () =>
+    {
+        var groups = new[] { "A", "B", "C", "D" }.Select(name => new FenceGroup { Id = name, Name = name }).ToList();
+        var layout = new Layout { Groups = groups };
+        Assert(layout.ReorderGroup("D", "B", false));
+        Assert(string.Join("", layout.Groups.Select(g => g.Id)) == "ADBC");
+        Assert(layout.ReorderGroup("A", "C", true));
+        Assert(string.Join("", layout.Groups.Select(g => g.Id)) == "DBCA");
+        Assert(layout.ReorderGroup("C", "D", false));
+        Assert(string.Join("", layout.Groups.Select(g => g.Id)) == "CDBA");
+    });
+    Test("Cancelled and unchanged group placements leave the order intact", () =>
+    {
+        var layout = new Layout { Groups = [new() { Id = "A" }, new() { Id = "B" }] };
+        Assert(!layout.ReorderGroup("A", "A", false));
+        Assert(!layout.ReorderGroup("A", "B", false));
+        Assert(!layout.ReorderGroup("B", "A", true));
+        Assert(!layout.ReorderGroup("missing", "A", false));
+        Assert(!layout.ReorderGroup("A", "missing", true));
+        Assert(string.Join("", layout.Groups.Select(g => g.Id)) == "AB");
+    });
+    Test("Reordering against a filtered target preserves other groups' relative order", () =>
+    {
+        var layout = new Layout { Groups = new[] { "A", "B", "C", "D", "E" }.Select(id => new FenceGroup { Id = id }).ToList() };
+        Assert(layout.ReorderGroup("E", "B", false));
+        Assert(string.Join("", layout.Groups.Select(g => g.Id)) == "AEBCD");
+        Assert(layout.ReorderGroup("B", "D", true));
+        Assert(string.Join("", layout.Groups.Select(g => g.Id)) == "AECDB");
+    });
+    Test("Group order survives save without changing tabs, geometry or references", () =>
+    {
+        var first = new FenceGroup { Name = "First", X = 137, Y = 203, Width = 321, Collapsed = true };
+        first.ActiveTab.Items.Add(doc);
+        var second = new FenceGroup { Name = "Second" };
+        var layout = new Layout { Groups = [first, second] };
+        Assert(layout.ReorderGroup(second.Id, first.Id, false));
+        Assert(ReferenceEquals(layout.Groups[1], first));
+        var restored = layout.Clone();
+        Assert(restored.Groups.Select(g => g.Id).SequenceEqual(new[] { second.Id, first.Id }));
+        var saved = restored.Groups[1];
+        Assert(saved.X == 137 && saved.Y == 203 && saved.Width == 321 && saved.Collapsed);
+        Assert(saved.ActiveTab.Id == first.ActiveTab.Id && saved.ActiveTab.Items.SequenceEqual(new[] { doc }));
+    });
     Test("Drop adds references and leaves original bytes intact", () =>
     {
         var tab = new FenceTab(); Assert(FileCatalog.AddReferences(tab, [doc, link, folder]) == 3);

@@ -39,6 +39,15 @@ internal static class SmokeTest
                 "单标签页仍显示可用的添加按钮", checks);
             var otherGroup = new FenceGroup { Name = "透明度验证", Collapsed = true };
             workspace.AddGroup(otherGroup);
+            var previousPosition = new Point(panel.Left, panel.Top);
+            workspace.ReorderGroup(otherGroup.Id, group.Id, false);
+            Check(workspace.Layout.Groups[0].Id == otherGroup.Id
+                && ((ItemsControl)workspace.Manager.FindName("GroupCards")).Items.Cast<GroupCard>().First().Id == otherGroup.Id
+                && panel.Left == previousPosition.X && panel.Top == previousPosition.Y,
+                "调整分组顺序同步控制台且不立即移动桌面分栏", checks);
+            workspace.ArrangePanels();
+            Check(otherGroup.Y < group.Y || (otherGroup.Y == group.Y && otherGroup.X < group.X),
+                "整理分栏位置遵循调整后的分组顺序", checks);
             var originalItems = ((ListBox)panel.FindName("Items")).ItemsSource;
             var expandedSlider = (Slider)workspace.Manager.FindName("ExpandedTransparency");
             var collapsedSlider = (Slider)workspace.Manager.FindName("CollapsedTransparency");
@@ -55,6 +64,7 @@ internal static class SmokeTest
                 "统一透明度保存到布局", checks);
             expandedSlider.Value = 42; collapsedSlider.Value = 80;
             workspace.RemoveGroup(otherGroup);
+            group.Width = 350; group.Height = 370; workspace.Notify();
             var startupXml = System.Xml.Linq.XElement.Parse(StartupRegistration.BuildTaskXml(@"C:\测试 & tools\OpenFenestra.exe", "--tray --portable", "S-1-5-21-123"));
             System.Xml.Linq.XNamespace ns = startupXml.Name.Namespace;
             Check(startupXml.Descendants(ns + "Command").Single().Value == @"C:\测试 & tools\OpenFenestra.exe"

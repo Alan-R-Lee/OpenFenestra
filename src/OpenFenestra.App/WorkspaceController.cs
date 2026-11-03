@@ -132,6 +132,13 @@ internal sealed class WorkspaceController : IDisposable
         Layout.Groups.Add(group); Notify("已创建分组「" + group.Name + "」");
     }
 
+    internal void ReorderGroup(string sourceId, string targetId, bool insertAfter)
+    {
+        if (!Layout.ReorderGroup(sourceId, targetId, insertAfter)) return;
+        Status = "分组顺序已保存；整理分栏位置时将按此顺序排列。";
+        ScheduleSave(); Changed?.Invoke();
+    }
+
     internal void RemoveGroup(FenceGroup group)
     {
         Store.Snapshot(Layout);

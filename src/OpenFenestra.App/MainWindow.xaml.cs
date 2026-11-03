@@ -1,4 +1,6 @@
 using OpenFenestra.Core;
+using System.Windows.Input;
+using System.Windows.Controls.Primitives;
 
 namespace OpenFenestra.App;
 
@@ -9,6 +11,12 @@ public partial class MainWindow : Window
 {
     private readonly WorkspaceController _workspace;
     private bool _rendering;
+    private const string GroupOrderFormat = "OpenFenestra.GroupOrder.v1";
+    private readonly string _groupOrderToken = Guid.NewGuid().ToString("N") + ":";
+    private Point _groupDragStart;
+    private string? _armedGroup;
+    private Border? _dropCue;
+    private DateTime _lastDragScroll;
     internal MainWindow(WorkspaceController workspace)
     {
         _workspace = workspace; InitializeComponent();
@@ -85,6 +93,75 @@ public partial class MainWindow : Window
     {
         var group = _workspace.Layout.Groups.First(g => g.Id == (string)((Button)sender).Tag);
         group.Visible = !group.Visible; _workspace.Notify();
+    }
+
+    private void OnGroupDragStart(object sender, MouseButtonEventArgs e)
+    {
+        _armedGroup = null;
+        for (var node = e.OriginalSource as DependencyObject; node is not null && !ReferenceEquals(node, sender); node = node is Visual ? VisualTreeHelper.GetParent(node) : LogicalTreeHelper.GetParent(node))
+            if (node is ButtonBase) return;
+        if (sender is Border { DataContext: GroupCard card })
+        { _armedGroup = card.Id; _groupDragStart = e.GetPosition(GroupCards); }
+    }
+    private void OnGroupDragMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) { _armedGroup = null; return; }
+        if (_armedGroup is not { } id || sender is not Border { DataContext: GroupCard card } border || card.Id != id) return;
+        var point = e.GetPosition(GroupCards);
+        if (Math.Abs(point.X - _groupDragStart.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(point.Y - _groupDragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        _armedGroup = null;
+        var data = new DataObject(); data.SetData(GroupOrderFormat, _groupOrderToken + id);
+        try { DragDrop.DoDragDrop(border, data, DragDropEffects.Move); }
+        finally { ClearGroupDropCue(); }
+        e.Handled = true;
+    }
+    private string? GroupDragId(IDataObject data)
+    {
+        if (!data.GetDataPresent(GroupOrderFormat, false) || data.GetData(GroupOrderFormat, false) is not string value
+            || !value.StartsWith(_groupOrderToken, StringComparison.Ordinal)) return null;
+        var id = value[_groupOrderToken.Length..];
+        return _workspace.Layout.Groups.Any(g => g.Id == id) ? id : null;
+    }
+    private void OnGroupDragOver(object sender, DragEventArgs e)
+    {
+        e.Handled = true; e.Effects = DragDropEffects.None;
+        if (sender is not Border { DataContext: GroupCard target } border || GroupDragId(e.Data) is not { } source) { ClearGroupDropCue(); return; }
+        var scrollPoint = e.GetPosition(GroupScroll);
+        if ((DateTime.UtcNow - _lastDragScroll).TotalMilliseconds > 70)
+        {
+            if (scrollPoint.Y < 32) GroupScroll.ScrollToVerticalOffset(GroupScroll.VerticalOffset - 16);
+            else if (scrollPoint.Y > GroupScroll.ActualHeight - 32) GroupScroll.ScrollToVerticalOffset(GroupScroll.VerticalOffset + 16);
+            _lastDragScroll = DateTime.UtcNow;
+        }
+        if (source == target.Id) { ClearGroupDropCue(); return; }
+        e.Effects = DragDropEffects.Move;
+        ClearGroupDropCue(); _dropCue = border;
+        var after = e.GetPosition(border).Y >= border.ActualHeight / 2;
+        border.BorderBrush = FenceWindow.Brush("#3D8264");
+        border.BorderThickness = after ? new Thickness(1, 1, 1, 3) : new Thickness(1, 3, 1, 1);
+    }
+    private void OnGroupDragLeave(object sender, DragEventArgs e)
+    {
+        if (sender is Border border && !new Rect(border.RenderSize).Contains(e.GetPosition(border))) ClearGroupDropCue();
+    }
+    private void OnGroupDrop(object sender, DragEventArgs e)
+    {
+        e.Handled = true; e.Effects = DragDropEffects.None;
+        if (sender is Border { DataContext: GroupCard target } border && GroupDragId(e.Data) is { } source)
+        {
+            var after = e.GetPosition(border).Y >= border.ActualHeight / 2;
+            ClearGroupDropCue();
+            _workspace.ReorderGroup(source, target.Id, after);
+            e.Effects = DragDropEffects.Move;
+        }
+        ClearGroupDropCue();
+    }
+    private void ClearGroupDropCue()
+    {
+        if (_dropCue is null) return;
+        _dropCue.BorderBrush = FenceWindow.Brush("#DEE4DA"); _dropCue.BorderThickness = new Thickness(1);
+        _dropCue = null;
     }
     private void OnOrganize(object sender, RoutedEventArgs e) => _workspace.OrganizeDesktop();
     private void OnTray(object sender, RoutedEventArgs e) => Hide();
