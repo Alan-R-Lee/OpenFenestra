@@ -1,0 +1,37 @@
+name: 问题反馈
+description: 报告可复现的问题
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: "请先检查已有 Issue。日志、布局和截图可能包含个人路径；请使用脱敏信息或测试样例。漏洞请按 SECURITY.md 私下报告。"
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本与来源
+      placeholder: "例如 v0.3.7，Actions 包 / 自行构建"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Windows 与显示环境
+      description: "Windows 构建号、显示器数量及缩放比例；如安装其他桌面增强工具请说明。"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 最小复现步骤
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 预期与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 脱敏日志或补充说明（可选）

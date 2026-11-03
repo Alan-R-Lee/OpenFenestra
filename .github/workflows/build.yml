@@ -29,13 +29,7 @@ jobs:
         run: ./scripts/build.ps1
       - name: Verify native bridge in portable archive
         shell: pwsh
-        run: |
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $zip = [IO.Compression.ZipFile]::OpenRead((Join-Path $PWD 'artifacts/OpenFenestra-win-x64.zip'))
-          try {
-            if (-not $zip.GetEntry('FenestraShellBridge.dll')) { throw 'Native bridge is missing from the portable ZIP.' }
-            if (-not $zip.GetEntry('OpenFenestra.exe')) { throw 'Application is missing from the portable ZIP.' }
-          } finally { $zip.Dispose() }
+        run: ./scripts/verify-package.ps1
       - uses: actions/upload-artifact@v7
         with:
           name: OpenFenestra-win-x64

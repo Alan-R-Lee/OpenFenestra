@@ -37,7 +37,7 @@ if (Test-Path -LiteralPath $installedBridge -PathType Leaf) {
     } catch { throw 'The installed native bridge is still in use. Disable desktop integration before updating; the installer will not restart Explorer automatically.' }
 }
 New-Item -ItemType Directory -Path $installDirectory -Force | Out-Null
-@('OpenFenestra.exe','FenestraShellBridge.dll','README.md','LICENSE','THIRD_PARTY_NOTICES.md','docs','licenses') | ForEach-Object {
+@('OpenFenestra.exe','FenestraShellBridge.dll','README.md','LICENSE','THIRD_PARTY_NOTICES.md','CONTRIBUTING.md','SECURITY.md','docs','licenses') | ForEach-Object {
     Copy-Item -LiteralPath (Join-Path $sourceDirectory $_) -Destination $installDirectory -Recurse -Force
 }
 if (-not $NoStart) {

@@ -10,3 +10,21 @@ artifacts/
 .qa/
 data/
 portable.mode
+
+# Local configuration, credentials and diagnostics
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.key
+*.dmp
+*.etl
+*.pdb
+**/runtime-state.json
+**/layout.json*
+
+# Distribute compiled packages through Actions / Releases, not Git
+*.exe
+*.dll
+*.zip

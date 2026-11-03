@@ -26,7 +26,15 @@ foreach ($notice in $nativeBuildInfo.noticeFiles) {
     $noticePath = Join-Path (Split-Path -Parent $nativeBuildInfoPath) $notice.file
     if (-not (Test-Path -LiteralPath $noticePath -PathType Leaf) -or (Get-FileHash -LiteralPath $noticePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $notice.sha256) { throw "Published native runtime notice is missing or mismatched: $($notice.file)" }
 }
-Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md'),(Join-Path $projectRoot 'LICENSE'),(Join-Path $projectRoot 'THIRD_PARTY_NOTICES.md') -Destination $outputDirectory -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md'),(Join-Path $projectRoot 'LICENSE'),(Join-Path $projectRoot 'THIRD_PARTY_NOTICES.md'),(Join-Path $projectRoot 'CONTRIBUTING.md'),(Join-Path $projectRoot 'SECURITY.md') -Destination $outputDirectory -Force
+# Refresh generated documentation so removed research files cannot survive a rebuild.
+$publishedDocs = [IO.Path]::GetFullPath((Join-Path $outputDirectory 'docs'))
+$expectedPublishedDocs = [IO.Path]::GetFullPath((Join-Path $projectRoot "artifacts\OpenFenestra-$Runtime\docs"))
+if (-not $publishedDocs.Equals($expectedPublishedDocs, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected generated documentation directory.' }
+if (Test-Path -LiteralPath $publishedDocs) {
+    if ((Get-Item -LiteralPath $publishedDocs).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Generated documentation must not be a link.' }
+    Remove-Item -LiteralPath $publishedDocs -Recurse -Force
+}
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs') -Destination $outputDirectory -Recurse -Force
 $packageRoot = if ($env:NUGET_PACKAGES) { $env:NUGET_PACKAGES } else { (& $dotnetCommand nuget locals global-packages --list) -replace '^[^:]+:\s*','' }
 foreach ($pack in @("microsoft.netcore.app.runtime.$Runtime", "microsoft.windowsdesktop.app.runtime.$Runtime")) {
@@ -40,7 +48,7 @@ foreach ($pack in @("microsoft.netcore.app.runtime.$Runtime", "microsoft.windows
     $notices | Copy-Item -Destination $licenseDirectory -Force
 }
 $archive = Join-Path $projectRoot "artifacts\OpenFenestra-$Runtime.zip"
-$distributionFiles = @('OpenFenestra.exe','FenestraShellBridge.dll','README.md','LICENSE','THIRD_PARTY_NOTICES.md','docs','licenses') | ForEach-Object { Join-Path $outputDirectory $_ }
+$distributionFiles = @('OpenFenestra.exe','FenestraShellBridge.dll','README.md','LICENSE','THIRD_PARTY_NOTICES.md','CONTRIBUTING.md','SECURITY.md','docs','licenses') | ForEach-Object { Join-Path $outputDirectory $_ }
 Compress-Archive -LiteralPath $distributionFiles -DestinationPath $archive -Force
 $checksum = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
 [System.IO.File]::WriteAllText((Join-Path $projectRoot "artifacts\OpenFenestra-$Runtime.sha256"), "$checksum  OpenFenestra-$Runtime.zip`n")
