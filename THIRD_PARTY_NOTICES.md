@@ -67,3 +67,9 @@ are included alongside the executable by the publish process.
 Fences and Stardock are trademarks of their respective owners. No Stardock binary,
 artwork, font, configuration template, source code, license key, or activation data
 is included. OpenFenestra does not require Fences to be installed.
+
+## Installer tooling
+
+The setup wizards are built with [Inno Setup](https://jrsoftware.org/). The installer engine retains its original copyright and website notices. Its complete license is included in [docs/licenses/InnoSetup-LICENSE.txt](docs/licenses/InnoSetup-LICENSE.txt).
+
+`installer/ChineseSimplified.isl` is retained from [Inno Setup is-6_7_4](https://github.com/jrsoftware/issrc/blob/is-6_7_4/Files/Languages/Unofficial/ChineseSimplified.isl), maintained by Zhenghan Yang; the upstream attribution and translation source comments remain in the file. This material and the setup engine are not relicensed as application MIT source.

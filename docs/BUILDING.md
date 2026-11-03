@@ -64,3 +64,19 @@ dotnet run --project src/OpenFenestra.App -- --data-dir ".qa/dev-data"
 | `docs` | 使用、架构、验证和许可材料 |
 
 编译产物、研究副本、个人配置及 `.qa` 检查结果均不纳入 Git。图标生成脚本只使用 Python 标准库，日常构建无需 Python。
+
+## 安装向导构建
+
+需要 [Inno Setup 6.5+](https://jrsoftware.org/isdl.php)，遵守其使用条款。脚本会发现 PATH 或标准安装位置中的 ISCC，也可传入 `-CompilerPath`。
+
+```powershell
+.\scripts\build-installer.ps1
+# 已构建便携包时跳过重复发布
+.\scripts\build-installer.ps1 -SkipPortableBuild
+# 在未注册本产品安装信息的测试用户/环境中验证安装、启动、卸载及数据保留
+.\scripts\test-installer.ps1
+```
+
+输出两个版本化的 Setup EXE 及 `SHA256SUMS.txt`。Light 使用框架依赖发布，已有 .NET 10 x64 桌面运行时即可安装；否则由向导指向 Microsoft 官方下载。Offline 包含运行时。安装器使用文件白名单，不包含个人配置或开发产物；不为 WPF 启用不受支持的裁剪。
+
+`installer/ChineseSimplified.isl` 来自固定版本的 Inno Setup 社区翻译；版权和来源见第三方说明。

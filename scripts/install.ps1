@@ -15,7 +15,8 @@ $sourceDirectory = Join-Path $projectRoot 'artifacts\OpenFenestra-win-x64'
 $sourceExe = Join-Path $sourceDirectory 'OpenFenestra.exe'
 $sourceBridge = Join-Path $sourceDirectory 'FenestraShellBridge.dll'
 $needsBuild = -not (Test-Path -LiteralPath $sourceExe -PathType Leaf) -or -not (Test-Path -LiteralPath $sourceBridge -PathType Leaf)
-if (-not $needsBuild) { $needsBuild = [version](Get-Item -LiteralPath $sourceExe).VersionInfo.FileVersion -lt [version]'0.3.0.0' }
+[xml]$project = Get-Content -LiteralPath (Join-Path $projectRoot 'src\OpenFenestra.App\OpenFenestra.App.csproj') -Raw
+if (-not $needsBuild) { $needsBuild = [version](Get-Item -LiteralPath $sourceExe).VersionInfo.FileVersion -lt [version]([string]$project.Project.PropertyGroup.Version) }
 if ($needsBuild) { & (Join-Path $PSScriptRoot 'build.ps1') }
 $bridgeBytes = [IO.File]::ReadAllBytes($sourceBridge)
 if ($bridgeBytes.Length -lt 64) { throw 'The native desktop bridge is not a valid PE file. Rebuild the portable package.' }

@@ -1,11 +1,11 @@
 # 发布准备
 
-本仓库当前提供实验版源码与 Actions 构建产物；整理文档和推送 main 不会自动修改仓库可见性或创建 Release。
+v1.0.0 是首个正式发布版。推送 main 只构建；推送与应用版本一致的 v 标签，在 Windows 构建、安装/卸载验证成功后自动创建 GitHub Release 并上传安装包、便携包与校验文件。不会修改仓库可见性。
 
 ## 验证候选版本
 
 1. 确认 `OpenFenestra.App.csproj` 和界面版本一致，工作区干净。
-2. 运行 `scripts/test.ps1`、`scripts/build-native.ps1 -SelfTest` 和 `scripts/build.ps1`、`scripts/verify-package.ps1`；检查同一提交的 Windows CI。
+2. 运行 `scripts/test.ps1`、`scripts/build-native.ps1 -SelfTest` 和 `scripts/build.ps1`、`scripts/verify-package.ps1`、`scripts/build-installer.ps1 -SkipPortableBuild`、`scripts/test-installer.ps1`；检查同一提交的 Windows CI。
 3. 在独立配置中验证启动、收纳、返回、关闭整合与退出恢复。只把实际执行的场景写进说明；跨桌面、多屏等未验证项继续明确列出。
 4. 检查 ZIP 仅含程序、DLL、使用文档和许可证，没有个人布局、日志、调试工具或研究副本。核对 ZIP 的 `.sha256` 文件及原生 runtime notices。
 
@@ -14,6 +14,6 @@
 - 检查所有将公开的分支、标签和历史，而不仅是当前文件树：凭据、机器路径、用户数据、截图和提交身份都需要复核。模式扫描不能替代人工审阅。
 - 保留 MIT、适配代码的上游声明，以及发行包对应工具链和 .NET 运行时的完整许可材料。
 - 在仓库所有者确认后再将仓库改为 public；若发现历史敏感数据，先处理并轮换相关凭据。
-- 使用与候选版本一致的标签创建 **pre-release**，上传 ZIP 与校验文件。源码自动下载包不包含可运行的程序。
+- 准备 `docs/releases/v版本.md`，使用与应用版本一致的标签触发正式 Release；候选预览版应使用单独的预发布流程。源码自动下载包不包含可运行的程序。
 
 发布说明写明 Windows 11 x64、版本、主要功能、使用入口和已知兼容边界。用户配置在更新中保留，不能把开发机的 `data` 随包发布。

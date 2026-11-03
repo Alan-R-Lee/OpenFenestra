@@ -2,12 +2,14 @@
 
 **桌面，自有条理。** 一个保留 Windows 原生桌面的开源图标分组工具。
 
-An experimental Windows 11 desktop organizer with native Explorer integration, tabs and collapsible groups.
+A Windows 11 desktop organizer with native Explorer integration, tabs and collapsible groups.
+
+> 本项目依赖使用人工智能开发，且为本开发者的第一个开源项目，欢迎感兴趣的贡献者提出意见及建议~
 
 [![Build](https://github.com/Alan-R-Lee/OpenFenestra/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/Alan-R-Lee/OpenFenestra/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**当前版本：v0.3.8 · 实验版 · Windows 11 x64**
+**当前版本：v1.0.0 · 首个正式发布版 · Windows 11 x64**
 
 ## 可以做什么
 
@@ -31,13 +33,19 @@ An experimental Windows 11 desktop organizer with native Explorer integration, t
 
 ## 开始使用
 
-目前通过 [GitHub Actions](https://github.com/Alan-R-Lee/OpenFenestra/actions/workflows/build.yml) 提供构建产物，尚未发布正式 Release。
+从 [v1.0.0 Releases](https://github.com/Alan-R-Lee/OpenFenestra/releases/tag/v1.0.0) 下载安装包：
 
-1. 登录 GitHub，选择一次成功构建，下载 `OpenFenestra-win-x64` 产物并解压其中的程序 ZIP。
-2. 完整解压后运行 `OpenFenestra.exe`，创建分组。
-3. 在左侧“设置”中按需开启原生桌面整合、自启动和自动归类。
+| 下载 | 约大小 | 适用情况 |
+| --- | ---: | --- |
+| [Light 轻量安装版](https://github.com/Alan-R-Lee/OpenFenestra/releases/download/v1.0.0/OpenFenestra-1.0.0-Setup-Light-x64.exe) | 3 MB | 已有 .NET 10 x64 桌面运行时；缺少时向导提供 Microsoft 下载入口 |
+| [Offline 离线安装版](https://github.com/Alan-R-Lee/OpenFenestra/releases/download/v1.0.0/OpenFenestra-1.0.0-Setup-Offline-x64.exe) | 50 MB | 首次使用推荐，自带运行时，无需额外下载 |
+| [便携 ZIP](https://github.com/Alan-R-Lee/OpenFenestra/releases/download/v1.0.0/OpenFenestra-win-x64.zip) | 70 MB | 完整解压后直接运行，可使用 `--portable` |
 
-运行包自带 .NET 运行时。请保留 EXE 旁的 DLL、`licenses` 和 `docs`；源码 ZIP 不是可直接运行的程序。
+安装向导支持简体中文和英文、安装位置、开始菜单、可选桌面快捷方式与登录启动。应用按当前用户安装；卸载保留配置和原文件。首次启动后，在左侧“设置”中按需开启原生桌面整合与自动归类。
+
+[SHA-256 校验文件](https://github.com/Alan-R-Lee/OpenFenestra/releases/download/v1.0.0/SHA256SUMS.txt) 随版本提供。EXE 尚未代码签名，请核对仓库来源和校验值。源码下载包不是可直接运行的程序。
+
+便携包请保留 EXE 旁的 DLL、`licenses` 和 `docs`。持续集成的开发构建也可从 [Actions](https://github.com/Alan-R-Lee/OpenFenestra/actions/workflows/build.yml) 获取。
 
 关闭控制台会收起到托盘；退出应用后，已收纳图标恢复原生显示。更多操作、便携模式和配置位置见[使用指南](docs/USAGE.md)。
 

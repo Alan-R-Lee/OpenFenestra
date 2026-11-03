@@ -43,19 +43,21 @@ public partial class App : Application
             : IsPortable ? Path.Combine(AppContext.BaseDirectory, "data")
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenFenestra");
         DataDirectory = data;
+        if (e.Args.Contains("--uninstall") && StartupRegistration.IsEnabled())
+            StartupRegistration.SetEnabled(false);
         var id = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(data.ToUpperInvariant())))[..20];
         _instance = new Mutex(true, "Local\\OpenFenestra-" + id, out var first);
         if (!first)
         {
             try
             {
-                using var signal = EventWaitHandle.OpenExisting("Local\\OpenFenestra-" + (e.Args.Contains("--exit") ? "Quit-" : "Show-") + id);
+                using var signal = EventWaitHandle.OpenExisting("Local\\OpenFenestra-" + (e.Args.Contains("--exit") || e.Args.Contains("--uninstall") ? "Quit-" : "Show-") + id);
                 signal.Set();
             }
             catch (WaitHandleCannotBeOpenedException) { MessageBox.Show("OpenFenestra 已在运行。请通过系统托盘打开管理窗口。", "OpenFenestra"); }
             Shutdown(); return;
         }
-        if (e.Args.Contains("--exit")) { Shutdown(); return; }
+        if (e.Args.Contains("--exit") || e.Args.Contains("--uninstall")) { Shutdown(); return; }
         _activate = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\OpenFenestra-Show-" + id);
         _quit = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\OpenFenestra-Quit-" + id);
         _activateWait = ThreadPool.RegisterWaitForSingleObject(_activate, (_, _) =>

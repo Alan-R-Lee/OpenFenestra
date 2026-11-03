@@ -2,6 +2,7 @@ name: Windows build and tests
 on:
   push:
     branches: [main, 'codex/**']
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -30,10 +31,36 @@ jobs:
       - name: Verify native bridge in portable archive
         shell: pwsh
         run: ./scripts/verify-package.ps1
+      - name: Build setup wizards
+        shell: pwsh
+        run: ./scripts/build-installer.ps1 -SkipPortableBuild
+      - name: Verify install and uninstall
+        shell: pwsh
+        run: ./scripts/test-installer.ps1
       - uses: actions/upload-artifact@v7
         with:
           name: OpenFenestra-win-x64
           path: |
             artifacts/OpenFenestra-win-x64.zip
             artifacts/OpenFenestra-win-x64.sha256
+            artifacts/OpenFenestra-*-Setup-*-x64.exe
+            artifacts/SHA256SUMS.txt
           if-no-files-found: error
+  release:
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: OpenFenestra-win-x64
+          path: release-assets
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "${GITHUB_REF_NAME}" = "v$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' src/OpenFenestra.App/OpenFenestra.App.csproj | head -1)"
+          gh release create "$GITHUB_REF_NAME" release-assets/* --verify-tag --latest --title "OpenFenestra $GITHUB_REF_NAME" --notes-file "docs/releases/$GITHUB_REF_NAME.md"
