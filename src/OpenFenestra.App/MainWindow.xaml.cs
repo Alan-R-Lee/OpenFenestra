@@ -48,7 +48,8 @@ public partial class MainWindow : Window
     }
     private void OnNavigate(object sender, RoutedEventArgs e)
     {
-        var page = (string)((Button)sender).Tag;
+        if (GroupsPage is null || SnapshotsPage is null || GuidePage is null) return;
+        var page = (string)((RadioButton)sender).Tag;
         GroupsPage.Visibility = page == "groups" ? Visibility.Visible : Visibility.Collapsed;
         SnapshotsPage.Visibility = page == "snapshots" ? Visibility.Visible : Visibility.Collapsed;
         GuidePage.Visibility = page == "guide" ? Visibility.Visible : Visibility.Collapsed;
