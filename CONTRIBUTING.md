@@ -11,6 +11,8 @@
 
 新增测试应验证用户行为或边界，不必为单纯的颜色、文案或排版修改增加测试。原生测试通过不等于已验证所有 Windows 构建。
 
+使用 AI 对话接续开发时，可调用仓库内的 [`$openfenestra-dev`](.agents/skills/openfenestra-dev/SKILL.md)，先读取[开发状态](docs/DEVELOPMENT_STATE.md)。根目录 [AGENTS.md](AGENTS.md) 提供接手入口；完成迭代后更新状态，避免只在聊天记录中保留结论。
+
 ## 代码与资料
 
 - 保持现有 C#、XAML 和 C++ 风格，尽量避免无关格式化或新依赖。

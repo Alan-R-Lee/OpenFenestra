@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenFenestra 项目迭代"
+  short_description: "衔接 OpenFenestra 的原生桌面开发、隔离验证与安装包发布"
+  default_prompt: "使用 $openfenestra-dev 读取项目状态，接续本次 OpenFenestra 迭代，并在完成后更新交接记录。"
