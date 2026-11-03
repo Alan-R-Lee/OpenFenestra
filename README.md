@@ -131,3 +131,5 @@ v0.3 的原生组件仅支持 x64，`scripts/build.ps1 -Runtime win-arm64` 会�
 [MIT](LICENSE) © 2026 Alan-R-Lee and contributors。应用及原生桥接源码独立开发，
 不依赖 Stardock 软件；不包含其源码、二进制文件、图片或授权数据。
 OpenFenestra 与 Stardock 无隶属或合作关系。
+
+管理控制台的“统一透明度”可分别调整所有分栏展开、折叠时的背景透明度，实时生效并自动保存；数值越大越透明。各分栏设置不同时，滑块旁会显示提示。

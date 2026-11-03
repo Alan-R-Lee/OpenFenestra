@@ -76,16 +76,13 @@ public partial class FenceWindow : Window
         Title = "OpenFenestra · " + Model.Name;
         GroupTitle.Text = Model.Name;
         Accent.Background = Brush(Model.Color);
-        var color = (Color)ColorConverter.ConvertFromString("#151C22");
-        Surface.Background = new SolidColorBrush(Color.FromArgb((byte)((Model.Collapsed ? Model.CollapsedOpacity : Model.Opacity) * 255), color.R, color.G, color.B));
+        RefreshAppearance();
         _applyingGeometry = true;
         try { Left = Model.X; Top = Model.Y; Width = Model.Width; }
         finally { _applyingGeometry = false; }
         var target = Model.Collapsed ? 34 : Model.Height;
         MinHeight = Model.Collapsed ? 34 : 180;
         BeginAnimation(HeightProperty, null); Height = target;
-        var opacity = Model.Collapsed ? 0.68 : 1;
-        BeginAnimation(OpacityProperty, null); Opacity = opacity;
         TabBar.Visibility = Model.Collapsed ? Visibility.Collapsed : Visibility.Visible;
         SearchArea.Visibility = !Model.Collapsed && _searchVisible ? Visibility.Visible : Visibility.Collapsed;
         ContentArea.Visibility = ResizeGrip.Visibility = Model.Collapsed ? Visibility.Collapsed : Visibility.Visible;
@@ -142,6 +139,12 @@ public partial class FenceWindow : Window
     internal void RefreshNames()
     {
         foreach (var view in Items.Items.OfType<EntryView>()) view.RefreshName();
+    }
+    internal void RefreshAppearance()
+    {
+        var color = (Color)ColorConverter.ConvertFromString("#151C22");
+        Surface.Background = new SolidColorBrush(Color.FromArgb((byte)((Model.Collapsed ? Model.CollapsedOpacity : Model.Opacity) * 255), color.R, color.G, color.B));
+        BeginAnimation(OpacityProperty, null); Opacity = Model.Collapsed ? 0.68 : 1;
     }
     private async void RefreshItems()
     {

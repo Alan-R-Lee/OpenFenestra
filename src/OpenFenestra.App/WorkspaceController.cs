@@ -307,6 +307,21 @@ internal sealed class WorkspaceController : IDisposable
         Notify(collapsed ? "已折叠所有分栏；单击栏头展开" : "已展开所有分栏");
     }
 
+    internal void SetAllTransparency(double transparency, bool collapsed)
+    {
+        if (!double.IsFinite(transparency)) return;
+        var opacity = 1 - Math.Clamp(transparency, collapsed ? 35 : 0, collapsed ? 94 : 85) / 100;
+        foreach (var group in Layout.Groups)
+        {
+            if (collapsed) group.CollapsedOpacity = opacity;
+            else group.Opacity = opacity;
+        }
+        // Appearance-only updates keep icons, selection and geometry intact while dragging.
+        foreach (var panel in Panels) panel.RefreshAppearance();
+        Status = "已统一调整所有分栏的" + (collapsed ? "折叠" : "展开") + "背景透明度，自动保存。";
+        ScheduleSave();
+    }
+
     private void ConfigureAutoOrganize()
     {
         foreach (var watcher in _desktopWatchers) watcher.Dispose();

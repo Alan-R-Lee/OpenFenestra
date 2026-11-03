@@ -35,6 +35,13 @@ public partial class MainWindow : Window
             DesktopSetting.IsChecked = _workspace.Layout.DesktopIntegrationEnabled;
             StartupSetting.IsChecked = StartupRegistration.IsEnabled();
             StatusText.Text = _workspace.Status;
+            var expanded = groups.Select(g => g.Opacity).ToArray();
+            var collapsed = groups.Select(g => g.CollapsedOpacity).ToArray();
+            ExpandedTransparency.Value = 100 * (1 - (expanded.Length > 0 ? expanded.Average() : 0.58));
+            CollapsedTransparency.Value = 100 * (1 - (collapsed.Length > 0 ? collapsed.Average() : 0.20));
+            ExpandedTransparency.IsEnabled = CollapsedTransparency.IsEnabled = groups.Count > 0;
+            ExpandedTransparencyValue.Text = TransparencyLabel(ExpandedTransparency.Value, expanded);
+            CollapsedTransparencyValue.Text = TransparencyLabel(CollapsedTransparency.Value, collapsed);
             SnapshotList.ItemsSource = _workspace.Store.Snapshots().Select(p => new SnapshotCard(p, Path.GetFileNameWithoutExtension(p))).ToList();
         }
         finally { _rendering = false; }
@@ -46,6 +53,16 @@ public partial class MainWindow : Window
         SnapshotsPage.Visibility = page == "snapshots" ? Visibility.Visible : Visibility.Collapsed;
         GuidePage.Visibility = page == "guide" ? Visibility.Visible : Visibility.Collapsed;
         Render();
+    }
+    private static string TransparencyLabel(double value, double[] opacities)
+        => $"{value:0}%" + (opacities.Select(v => Math.Round(v, 4)).Distinct().Skip(1).Any() ? " · 各分栏不同" : "");
+    private void OnTransparencyChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_rendering || _workspace is null || ExpandedTransparencyValue is null || CollapsedTransparencyValue is null) return;
+        var collapsed = ReferenceEquals(sender, CollapsedTransparency);
+        _workspace.SetAllTransparency(e.NewValue, collapsed);
+        (collapsed ? CollapsedTransparencyValue : ExpandedTransparencyValue).Text = $"{e.NewValue:0}%";
+        StatusText.Text = _workspace.Status;
     }
     private void OnCreate(object sender, RoutedEventArgs e)
     {

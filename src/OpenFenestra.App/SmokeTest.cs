@@ -37,6 +37,24 @@ internal static class SmokeTest
             var addTab = (Button)panel.FindName("AddTabButton");
             Check(group.Tabs.Count == 1 && tabBar.IsVisible && addTab.IsVisible && addTab.IsEnabled,
                 "单标签页仍显示可用的添加按钮", checks);
+            var otherGroup = new FenceGroup { Name = "透明度验证", Collapsed = true };
+            workspace.AddGroup(otherGroup);
+            var originalItems = ((ListBox)panel.FindName("Items")).ItemsSource;
+            var expandedSlider = (Slider)workspace.Manager.FindName("ExpandedTransparency");
+            var collapsedSlider = (Slider)workspace.Manager.FindName("CollapsedTransparency");
+            expandedSlider.Value = 65;
+            collapsedSlider.Value = 89;
+            Check(workspace.Layout.Groups.All(g => Math.Abs(g.Opacity - 0.35) < 0.001 && Math.Abs(g.CollapsedOpacity - 0.11) < 0.001),
+                "控制台透明度滑块同步展开与折叠分栏", checks);
+            Check(workspace.Panels.All(p => Math.Abs(((SolidColorBrush)((Border)p.FindName("Surface")).Background).Color.A
+                    - (p.Model.Collapsed ? 0.11 : 0.35) * 255) < 1.1)
+                && ReferenceEquals(originalItems, ((ListBox)panel.FindName("Items")).ItemsSource),
+                "透明度实时生效且不重建图标列表", checks);
+            workspace.SaveNow();
+            Check(workspace.Store.Load().Groups.All(g => Math.Abs(g.Opacity - 0.35) < 0.001 && Math.Abs(g.CollapsedOpacity - 0.11) < 0.001),
+                "统一透明度保存到布局", checks);
+            expandedSlider.Value = 42; collapsedSlider.Value = 80;
+            workspace.RemoveGroup(otherGroup);
             var startupXml = System.Xml.Linq.XElement.Parse(StartupRegistration.BuildTaskXml(@"C:\测试 & tools\OpenFenestra.exe", "--tray --portable", "S-1-5-21-123"));
             System.Xml.Linq.XNamespace ns = startupXml.Name.Namespace;
             Check(startupXml.Descendants(ns + "Command").Single().Value == @"C:\测试 & tools\OpenFenestra.exe"
