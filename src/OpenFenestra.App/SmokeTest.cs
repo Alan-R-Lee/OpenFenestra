@@ -118,7 +118,17 @@ internal static class SmokeTest
             Capture(restoredPanel, Path.Combine(workspace.Store.DirectoryPath, "panel-preview.png"));
             Check(renderedItems.ItemContainerGenerator.ContainerFromIndex(0) is ListBoxItem { ActualHeight: > 50 }, "图标项目实际布局", checks);
             workspace.Manager.Show();
+            ((RadioButton)workspace.Manager.FindName("SettingsNavigation")).IsChecked = true;
+            Capture(workspace.Manager, Path.Combine(workspace.Store.DirectoryPath, "settings-preview.png"));
+            ((RadioButton)workspace.Manager.FindName("GroupsNavigation")).IsChecked = true;
             Capture(workspace.Manager, Path.Combine(workspace.Store.DirectoryPath, "manager-preview.png"));
+            var cards = (ItemsControl)workspace.Manager.FindName("GroupCards");
+            var originalCards = cards.ItemsSource;
+            var groupScroll = (ScrollViewer)workspace.Manager.FindName("GroupScroll");
+            cards.ItemsSource = Enumerable.Range(1, 9).Select(i => new GroupCard(i.ToString(), "滚动预览分组 " + i, "#78B9A1", "1 个标签页 · 拖动排序预览", "隐藏")).ToArray();
+            workspace.Manager.UpdateLayout(); groupScroll.ScrollToBottom(); workspace.Manager.UpdateLayout();
+            Capture(workspace.Manager, Path.Combine(workspace.Store.DirectoryPath, "groups-scrolled-preview.png"));
+            cards.ItemsSource = originalCards; groupScroll.ScrollToTop(); workspace.Manager.UpdateLayout();
             Capture(workspace.Panels.Single(), Path.Combine(workspace.Store.DirectoryPath, "panel-preview.png"));
             workspace.Layout.Groups[0].Name = "退出保存验证";
             workspace.ScheduleSave(); workspace.Dispose();

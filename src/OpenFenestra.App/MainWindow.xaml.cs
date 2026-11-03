@@ -56,11 +56,12 @@ public partial class MainWindow : Window
     }
     private void OnNavigate(object sender, RoutedEventArgs e)
     {
-        if (GroupsPage is null || SnapshotsPage is null || GuidePage is null) return;
+        if (GroupsPage is null || SnapshotsPage is null || GuidePage is null || SettingsPage is null) return;
         var page = (string)((RadioButton)sender).Tag;
         GroupsPage.Visibility = page == "groups" ? Visibility.Visible : Visibility.Collapsed;
         SnapshotsPage.Visibility = page == "snapshots" ? Visibility.Visible : Visibility.Collapsed;
         GuidePage.Visibility = page == "guide" ? Visibility.Visible : Visibility.Collapsed;
+        SettingsPage.Visibility = page == "settings" ? Visibility.Visible : Visibility.Collapsed;
         Render();
     }
     private static string TransparencyLabel(double value, double[] opacities)

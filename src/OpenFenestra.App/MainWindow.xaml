@@ -41,11 +41,12 @@
           <TextBlock Text="给每一份灵感，一个位置。" FontSize="11" Foreground="#A9C7B6" Margin="0,9,0,40"/>
           <RadioButton x:Name="GroupsNavigation" Content="▦    桌面分组" Style="{StaticResource SidebarNavigation}" GroupName="SidebarPages" IsChecked="True" Tag="groups" Checked="OnNavigate"/>
           <RadioButton x:Name="SnapshotsNavigation" Content="◷    布局快照" Style="{StaticResource SidebarNavigation}" GroupName="SidebarPages" Tag="snapshots" Checked="OnNavigate"/>
+          <RadioButton x:Name="SettingsNavigation" Content="⚙    设置" Style="{StaticResource SidebarNavigation}" GroupName="SidebarPages" Tag="settings" Checked="OnNavigate"/>
           <RadioButton x:Name="GuideNavigation" Content="?    使用指南" Style="{StaticResource SidebarNavigation}" GroupName="SidebarPages" Tag="guide" Checked="OnNavigate"/>
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom">
           <Border Background="#244B3D" CornerRadius="10" Padding="13" Margin="0,0,0,20"><StackPanel><TextBlock Text="你的桌面，始终在手边" Foreground="#E2EDDF" FontSize="11"/><TextBlock Text="Ctrl + Alt + Space" Foreground="#ACD6B6" FontWeight="SemiBold" Margin="0,7,0,0"/><TextBlock Text="一键速览所有分组" Foreground="#9FBFAE" FontSize="10" Margin="0,4,0,0"/></StackPanel></Border>
-          <TextBlock Text="开源 · 本地存储 · 自由整理" Foreground="#93B19F" FontSize="10"/><TextBlock Text="v0.3.6  /  原生桌面实验版" Foreground="#6F9A83" FontSize="10" Margin="0,7,0,0"/>
+          <TextBlock Text="开源 · 本地存储 · 自由整理" Foreground="#93B19F" FontSize="10"/><TextBlock Text="v0.3.7  /  原生桌面实验版" Foreground="#6F9A83" FontSize="10" Margin="0,7,0,0"/>
         </StackPanel>
         <Grid/>
       </DockPanel>
@@ -58,19 +59,19 @@
       </DockPanel>
       <Grid Grid.Row="1">
         <Grid x:Name="GroupsPage">
-          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+          <ScrollViewer x:Name="GroupScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" CanContentScroll="False" PanningMode="VerticalOnly">
+            <StackPanel>
           <Grid Margin="0,0,0,20"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="桌面，自有条理。" FontSize="30" FontWeight="SemiBold"/><TextBlock Text="把常用留在眼前，把杂乱交给分组。" Style="{StaticResource Caption}" Margin="0,8,0,0"/></StackPanel><Button Grid.Column="1" Content="＋ 新建分组" Style="{StaticResource PrimaryButton}" VerticalAlignment="Center" Margin="0" Click="OnCreate"/></Grid>
-          <Border Grid.Row="1" Background="#E8EFDF" CornerRadius="14" Padding="23,18" Margin="0,0,0,20">
+          <Border Background="#E8EFDF" CornerRadius="14" Padding="23,18" Margin="0,0,0,20">
             <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="让桌面，轻一点" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="按类型收纳桌面项目，原文件保留在原位置。" Foreground="#677E64" FontSize="12" Margin="0,7,0,0"/></StackPanel><Button Grid.Column="1" Content="一键归类桌面  ↗" Background="#D5E2C8" Margin="16,0,0,0" VerticalAlignment="Center" Click="OnOrganize"/></Grid>
           </Border>
-          <Grid Grid.Row="2" Margin="0,0,0,19"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <Grid Margin="0,0,0,19"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
             <StackPanel><TextBlock x:Name="GroupCount" FontSize="26" FontWeight="SemiBold"/><TextBlock Text="桌面分组" Style="{StaticResource Caption}" FontSize="11"/></StackPanel>
             <StackPanel Grid.Column="1"><TextBlock x:Name="ReferenceCount" FontSize="26" FontWeight="SemiBold"/><TextBlock Text="文件引用" Style="{StaticResource Caption}" FontSize="11"/></StackPanel>
             <StackPanel Grid.Column="2"><TextBlock x:Name="PortalCount" FontSize="26" FontWeight="SemiBold"/><TextBlock Text="实时文件夹" Style="{StaticResource Caption}" FontSize="11"/></StackPanel>
           </Grid>
-          <DockPanel Grid.Row="3" Margin="0,0,0,13"><Grid DockPanel.Dock="Right" Width="190"><TextBox x:Name="GroupSearch" Padding="10,6" ToolTip="搜索分组名称或标签页" TextChanged="OnSearch"/><TextBlock Text="⌕  搜索分组" Foreground="#879286" Margin="11,0" VerticalAlignment="Center" IsHitTestVisible="False"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Text, ElementName=GroupSearch}" Value=""><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock></Grid><TextBlock Text="我的分组 · 拖动排序" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/></DockPanel>
-          <ScrollViewer x:Name="GroupScroll" Grid.Row="4" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel>
+          <DockPanel Margin="0,0,0,13"><Grid DockPanel.Dock="Right" Width="190"><TextBox x:Name="GroupSearch" Padding="10,6" ToolTip="搜索分组名称或标签页" TextChanged="OnSearch"/><TextBlock Text="⌕  搜索分组" Foreground="#879286" Margin="11,0" VerticalAlignment="Center" IsHitTestVisible="False"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Text, ElementName=GroupSearch}" Value=""><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock></Grid><TextBlock Text="我的分组 · 拖动排序" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/></DockPanel>
+
               <Border x:Name="EmptyState" CornerRadius="12" BorderBrush="#DCE3D7" BorderThickness="1" Padding="24" Margin="0,0,0,18"><StackPanel><TextBlock Text="从一个分组开始" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="新建一个收纳盒，或一键归类现有桌面。&#10;也可以映射一个文件夹，让内容随时更新。" Style="{StaticResource Caption}" Margin="0,8,0,14"/><Button Content="创建我的第一个分组  →" HorizontalAlignment="Left" Click="OnCreate"/></StackPanel></Border>
               <Border Background="#EDF0E9" CornerRadius="10" Padding="16,13" Margin="0,0,0,14"><StackPanel>
                 <TextBlock Text="统一透明度" FontSize="14" FontWeight="SemiBold"/>
@@ -98,10 +99,25 @@
                   </Grid>
                 </Border>
               </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-              <Border Background="#EDF0E9" CornerRadius="10" Padding="15,7" Margin="0,8,0,0"><StackPanel><WrapPanel Margin="0,4,0,5"><Button Content="整理分栏位置" Click="OnArrange" Padding="10,6"/><Button Content="折叠全部" Click="OnCollapseAll" Padding="10,6"/><Button Content="展开全部" Click="OnExpandAll" Padding="10,6"/><Button Content="退出应用" Click="OnExitApp" Padding="10,6"/></WrapPanel><CheckBox x:Name="DesktopSetting" Content="原生桌面整合（实验）：收纳后不重复显示图标" Checked="OnDesktopSetting" Unchecked="OnDesktopSetting"/><TextBlock Text="保留 Windows 桌面；关闭此项或退出应用后恢复图标。" Foreground="#7E897F" FontSize="10" TextWrapping="Wrap" Margin="19,0,0,5"/><CheckBox x:Name="StartupSetting" Content="开机自动运行，并恢复上次布局" Checked="OnStartupSetting" Unchecked="OnStartupSetting"/><CheckBox x:Name="PinSetting" Content="分栏保持在桌面层并跨虚拟桌面显示" Checked="OnSettings" Unchecked="OnSettings"/><CheckBox x:Name="AutoSetting" Content="自动归类新增桌面项目" Checked="OnSettings" Unchecked="OnSettings"/></StackPanel></Border>
+
             </StackPanel>
           </ScrollViewer>
         </Grid>
+        <ScrollViewer x:Name="SettingsPage" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel>
+            <TextBlock Text="设置" FontSize="28" FontWeight="SemiBold"/>
+            <TextBlock Text="按你的习惯，调整桌面与启动方式。设置会自动保存。" Style="{StaticResource Caption}" Margin="0,10,0,24"/>
+            <Border Background="#EDF0E9" CornerRadius="12" Padding="22,18" Margin="0,0,0,18"><StackPanel>
+              <TextBlock Text="桌面与启动" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
+              <CheckBox x:Name="DesktopSetting" Content="原生桌面整合（实验）：收纳后不重复显示图标" Checked="OnDesktopSetting" Unchecked="OnDesktopSetting"/><TextBlock Text="保留 Windows 桌面；关闭此项或退出应用后恢复图标。" Foreground="#7E897F" FontSize="10" TextWrapping="Wrap" Margin="19,0,0,5"/><CheckBox x:Name="StartupSetting" Content="开机自动运行，并恢复上次布局" Checked="OnStartupSetting" Unchecked="OnStartupSetting"/><CheckBox x:Name="PinSetting" Content="分栏保持在桌面层并跨虚拟桌面显示" Checked="OnSettings" Unchecked="OnSettings"/><CheckBox x:Name="AutoSetting" Content="自动归类新增桌面项目" Checked="OnSettings" Unchecked="OnSettings"/>
+            </StackPanel></Border>
+            <Border Background="White" BorderBrush="#DEE4DA" BorderThickness="1" CornerRadius="12" Padding="22,18"><StackPanel>
+              <TextBlock Text="分栏操作" FontSize="16" FontWeight="SemiBold"/>
+              <TextBlock Text="整理位置会遵循“我的分组”中保存的顺序。" Style="{StaticResource Caption}" Margin="0,7,0,12"/>
+              <WrapPanel Margin="0,4,0,5"><Button Content="整理分栏位置" Click="OnArrange" Padding="10,6"/><Button Content="折叠全部" Click="OnCollapseAll" Padding="10,6"/><Button Content="展开全部" Click="OnExpandAll" Padding="10,6"/><Button Content="退出应用" Click="OnExitApp" Padding="10,6"/></WrapPanel>
+            </StackPanel></Border>
+          </StackPanel>
+        </ScrollViewer>
         <Grid x:Name="SnapshotsPage" Visibility="Collapsed"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
           <StackPanel Margin="0,0,0,25"><TextBlock Text="留住喜欢的布局。" FontSize="28" FontWeight="SemiBold"/><TextBlock Text="快照保存分组、标签页和位置。恢复前会自动备份当前布局。" Style="{StaticResource Caption}" Margin="0,10,0,0"/></StackPanel>
           <WrapPanel Grid.Row="1" Margin="0,0,0,20"><Button Content="＋ 保存当前快照" Style="{StaticResource PrimaryButton}" Click="OnSnapshot"/><Button Content="导出布局…" Click="OnExport"/><Button Content="导入布局…" Click="OnImport"/></WrapPanel>
