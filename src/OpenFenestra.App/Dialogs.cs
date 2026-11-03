@@ -24,7 +24,7 @@ internal abstract class EditorDialog : Window
         var cancel = new Button { Content = "取消", IsCancel = true }; DockPanel.SetDock(cancel, Dock.Right); row.Children.Add(cancel);
         if (remove is not null)
         {
-            var delete = new Button { Content = "移除分组", Foreground = FenceWindow.Brush("#A35353"), Background = Brushes.Transparent };
+            var delete = new Button { Content = "移除分组", Foreground = Brushes.White, Background = FenceWindow.Brush("#B94040") };
             delete.Click += (_, _) => remove(); row.Children.Add(delete);
         }
         Fields.Children.Add(row);

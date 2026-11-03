@@ -45,7 +45,7 @@
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom">
           <Border Background="#244B3D" CornerRadius="10" Padding="13" Margin="0,0,0,20"><StackPanel><TextBlock Text="你的桌面，始终在手边" Foreground="#E2EDDF" FontSize="11"/><TextBlock Text="Ctrl + Alt + Space" Foreground="#ACD6B6" FontWeight="SemiBold" Margin="0,7,0,0"/><TextBlock Text="一键速览所有分组" Foreground="#9FBFAE" FontSize="10" Margin="0,4,0,0"/></StackPanel></Border>
-          <TextBlock Text="开源 · 本地存储 · 自由整理" Foreground="#93B19F" FontSize="10"/><TextBlock Text="v0.3.4  /  原生桌面实验版" Foreground="#6F9A83" FontSize="10" Margin="0,7,0,0"/>
+          <TextBlock Text="开源 · 本地存储 · 自由整理" Foreground="#93B19F" FontSize="10"/><TextBlock Text="v0.3.5  /  原生桌面实验版" Foreground="#6F9A83" FontSize="10" Margin="0,7,0,0"/>
         </StackPanel>
         <Grid/>
       </DockPanel>
