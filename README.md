@@ -9,7 +9,9 @@ A Windows 11 desktop organizer with native Explorer integration, tabs and collap
 [![Build](https://github.com/Alan-R-Lee/OpenFenestra/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/Alan-R-Lee/OpenFenestra/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**当前版本：v1.0.0 · 首个正式发布版 · Windows 11 x64**
+**当前源码 / 本机版本：v1.0.1 · Windows 11 x64**
+
+v1.0.1 新增最近分栏与一键归类，并改进文件拖出及桌面背景投递；已在本机更新，尚未创建 GitHub Release。原生空桌面的网格占位等交互仍待完善。
 
 ## 可以做什么
 
@@ -33,7 +35,7 @@ A Windows 11 desktop organizer with native Explorer integration, tabs and collap
 
 ## 开始使用
 
-从 [v1.0.0 Releases](https://github.com/Alan-R-Lee/OpenFenestra/releases/tag/v1.0.0) 下载安装包：
+已发布安装包仍为 v1.0.0，从 [v1.0.0 Releases](https://github.com/Alan-R-Lee/OpenFenestra/releases/tag/v1.0.0) 下载安装包：
 
 | 下载 | 约大小 | 适用情况 |
 | --- | ---: | --- |

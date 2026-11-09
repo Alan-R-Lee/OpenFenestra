@@ -23,6 +23,8 @@ internal sealed class WorkspaceController : IDisposable
     private bool _disposed;
     private bool _anchorQueued;
     private bool _peeking;
+    private bool _captureDesktop = true;
+    private DateTime _nextRecentScan;
     private readonly Dictionary<nint, string> _pinErrors = [];
     private readonly HashSet<nint> _pinnedPanels = [];
     private readonly DesktopIntegration _desktop;
@@ -41,16 +43,19 @@ internal sealed class WorkspaceController : IDisposable
         _desktop = new DesktopIntegration(this);
         Manager = new MainWindow(this);
         _save.Tick += (_, _) => { _save.Stop(); SaveNow(); };
-        _organize.Tick += (_, _) => { _organize.Stop(); if (Layout.AutoOrganize) OrganizeDesktop(); };
+        _organize.Tick += (_, _) => { _organize.Stop(); RefreshRecent(); };
         _anchor.Tick += (_, _) =>
         {
             _desktop.Tick();
+            if (_captureDesktop && DateTime.UtcNow >= _nextRecentScan) RefreshRecent();
             if (!_peeking) ApplyDesktopZOrder();
         };
     }
 
-    internal void Start(bool showManager, bool collapseOnStart = false)
+    internal void Start(bool showManager, bool collapseOnStart = false, bool captureDesktop = true)
     {
+        _captureDesktop = captureDesktop;
+        if (_captureDesktop) RecentItems.Ensure(Layout);
         // Apply before creating windows so expanded content never flashes at logon.
         // Keep each group's expanded height for the user's next click.
         if (collapseOnStart)
@@ -82,7 +87,7 @@ internal sealed class WorkspaceController : IDisposable
         Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
         {
             if (_disposed) return;
-            try { _ = ShellFiles.DesktopItems(); } catch (Exception error) { Report(error); }
+            try { RefreshRecent(); } catch (Exception error) { Report(error); }
             foreach (var panel in Panels) panel.RefreshNames();
             ConfigureAutoOrganize(); ConfigureDesktopIntegration(retryOnFailure: true); _anchor.Start();
             if (Layout.StartWithWindows)
@@ -142,6 +147,7 @@ internal sealed class WorkspaceController : IDisposable
 
     internal void RemoveGroup(FenceGroup group)
     {
+        if (group.IsRecent) { ReportStatus("最近分栏用于接收新项目，可通过隐藏分组暂时隐藏。"); return; }
         Store.Snapshot(Layout);
         foreach (var path in group.Tabs.Where(t => !t.IsPortal).SelectMany(t => t.Items))
             if (!Layout.DesktopItems.Contains(path, StringComparer.OrdinalIgnoreCase)) Layout.DesktopItems.Add(path);
@@ -151,7 +157,10 @@ internal sealed class WorkspaceController : IDisposable
     internal void OrganizeDesktop()
     {
         Store.Snapshot(Layout);
-        var count = FileCatalog.OrganizeEntries(Layout, ShellFiles.DesktopItems());
+        var count = 0;
+        foreach (var recent in Layout.Groups.Where(g => g.IsRecent).ToArray())
+            count += RecentItems.Organize(Layout, recent);
+        count += FileCatalog.OrganizeEntries(Layout, ShellFiles.DesktopItems());
         Notify($"已归类 {count} 个新桌面项目 · 原文件位置保持不变");
     }
 
@@ -159,6 +168,28 @@ internal sealed class WorkspaceController : IDisposable
     {
         Layout.PinToDesktop = pin; Layout.AutoOrganize = auto;
         ConfigureAutoOrganize(); Notify("设置已保存");
+        if (auto) OrganizeDesktop();
+    }
+
+    internal void OrganizeRecent(FenceGroup recent)
+    {
+        Store.Snapshot(Layout);
+        var count = RecentItems.Organize(Layout, recent);
+        Notify($"已归类最近分栏中的 {count} 个项目 · 原文件位置保持不变");
+    }
+
+    private void RefreshRecent()
+    {
+        if (_disposed || !_captureDesktop) return;
+        if (IsDragging) { QueueOrganize(); return; }
+        _nextRecentScan = DateTime.UtcNow.AddSeconds(10);
+        try
+        {
+            var count = RecentItems.Capture(Layout, ShellFiles.DesktopItems());
+            if (count > 0 && Layout.AutoOrganize) { OrganizeDesktop(); return; }
+            if (count > 0) Notify($"最近分栏新增 {count} 个桌面项目");
+        }
+        catch (Exception error) { Report(error); }
     }
 
     internal void SetDesktopIntegration(bool enabled)
@@ -231,10 +262,12 @@ internal sealed class WorkspaceController : IDisposable
         // A reference to a file outside the Desktop needs a real desktop link.
         // Never pretend that an entry in our JSON creates an Explorer icon.
         var desktopItems = items.Select(path => native.ContainsKey(path) ? path : CreateDesktopShortcut(path)).ToArray();
-        var count = DesktopAssignments.ReturnToDesktop(Layout, items, position);
+        // Also pin newly created desktop links outside the inbox. Otherwise the
+        // directory watcher would immediately collect a link we just returned.
+        DesktopAssignments.ReturnToDesktop(Layout, items.Concat(desktopItems), position);
         for (var index = 0; index < desktopItems.Length; index++)
             Layout.DesktopPositions[desktopItems[index]] = new(position.X + index * 90, position.Y);
-        Notify($"已将 {count} 个图标放回原生桌面");
+        Notify($"已将 {items.Length} 个图标放回原生桌面");
         var destinations = desktopItems.Select((path, index) => (path, point: NativeDesktopShell.ScreenToView(VisibleDesktopPoint(position.X + index * 90, position.Y))))
             .ToDictionary(item => item.path, item => item.point, StringComparer.OrdinalIgnoreCase);
         NativeDesktopShell.PositionItems(destinations);
@@ -254,7 +287,7 @@ internal sealed class WorkspaceController : IDisposable
             desktopDrop = point; e.Action = DragAction.Cancel; e.Handled = true;
         };
         DragDrop.AddQueryContinueDragHandler(source, continuation);
-        try { DragDrop.DoDragDrop(source, new DesktopDrag(paths).Data(false), DragDropEffects.Link | DragDropEffects.Copy); }
+        try { DragDrop.DoDragDrop(source, new DesktopDrag(paths).Data(), DragDropEffects.Link | DragDropEffects.Copy); }
         finally { IsDragging = false; DragDrop.RemoveQueryContinueDragHandler(source, continuation); }
         if (desktopDrop is { } drop) ReturnToDesktop(paths, new(drop.X, drop.Y));
     }
@@ -352,13 +385,13 @@ internal sealed class WorkspaceController : IDisposable
     {
         foreach (var watcher in _desktopWatchers) watcher.Dispose();
         _desktopWatchers.Clear();
-        if (!Layout.AutoOrganize) return;
+        if (!_captureDesktop) return;
         foreach (var path in DesktopPaths)
         {
             try
             {
                 var watcher = new FileSystemWatcher(path) { IncludeSubdirectories = false, NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName };
-                watcher.Created += OnDesktopChanged; watcher.Renamed += OnDesktopChanged;
+                watcher.Created += OnDesktopChanged; watcher.Renamed += OnDesktopChanged; watcher.Deleted += OnDesktopChanged;
                 watcher.Error += (_, _) => QueueOrganize();
                 watcher.EnableRaisingEvents = true; _desktopWatchers.Add(watcher);
             }
@@ -424,7 +457,9 @@ internal sealed class WorkspaceController : IDisposable
         Store.Snapshot(Layout);
         foreach (var panel in Panels.ToArray()) panel.DisposePanel();
         _panels.Clear(); _pinnedPanels.Clear(); _pinErrors.Clear(); Layout = next;
+        if (_captureDesktop) RecentItems.Ensure(Layout);
         ConfigureAutoOrganize(); ConfigureDesktopIntegration(); Notify("布局已恢复 · 恢复前的布局已自动保存为快照");
+        QueueOrganize();
     }
 
     internal void Report(Exception error)

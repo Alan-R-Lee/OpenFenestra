@@ -259,15 +259,26 @@ void ClearHiddenSelection() {
 class DropGate final : public IDropTarget {
     LONG references = 1;
     IDropTarget* original;
+    IDropTarget* background;
+    IDropTarget* current = nullptr;
     IDataObject* data = nullptr;
-    bool entered = false;
     bool enabled = true;
     void ResetData() { if (data) { data->Release(); data = nullptr; } }
-    bool Block(POINTL p) const { return enabled && HitHidden({p.x, p.y}); }
-    void LeaveOriginal() { if (entered) { entered = false; original->DragLeave(); } }
+    IDropTarget* Target(POINTL p) const { return enabled && HitHidden({p.x, p.y}) ? background : original; }
+    void LeaveOriginal() { if (current) { auto* previous = current; current = nullptr; previous->DragLeave(); } }
+    HRESULT EnterTarget(IDataObject* incoming, DWORD keys, POINTL p, DWORD* effect) {
+        auto* target = Target(p);
+        if (current == target) return S_OK;
+        LeaveOriginal();
+        const HRESULT result = target->DragEnter(incoming, keys, p, effect);
+        if (SUCCEEDED(result)) current = target;
+        return result;
+    }
 public:
-    explicit DropGate(IDropTarget* target) : original(target) { original->AddRef(); }
-    ~DropGate() { ResetData(); original->Release(); }
+    DropGate(IDropTarget* target, IDropTarget* desktopBackground) : original(target), background(desktopBackground) {
+        original->AddRef(); background->AddRef();
+    }
+    ~DropGate() { ResetData(); original->Release(); background->Release(); }
     IDropTarget* Original() const { return original; }
     void Disable() { enabled = false; LeaveOriginal(); ResetData(); }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id, void** value) override {
@@ -285,34 +296,24 @@ public:
     HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* incoming, DWORD keys, POINTL p, DWORD* effect) override {
         if (!effect || !incoming) return E_INVALIDARG;
         LeaveOriginal(); ResetData(); data = incoming; data->AddRef();
-        if (Block(p)) { *effect = DROPEFFECT_NONE; return S_OK; }
-        const HRESULT result = original->DragEnter(incoming, keys, p, effect);
-        entered = SUCCEEDED(result); return result;
+        return EnterTarget(incoming, keys, p, effect);
     }
     HRESULT STDMETHODCALLTYPE DragOver(DWORD keys, POINTL p, DWORD* effect) override {
         if (!effect) return E_POINTER;
-        if (Block(p)) { LeaveOriginal(); *effect = DROPEFFECT_NONE; return S_OK; }
-        if (!entered && data) {
-            const HRESULT result = original->DragEnter(data, keys, p, effect);
-            if (FAILED(result)) return result;
-            entered = true;
-        }
-        return entered ? original->DragOver(keys, p, effect) : E_UNEXPECTED;
+        if (!data) return E_UNEXPECTED;
+        const HRESULT result = EnterTarget(data, keys, p, effect);
+        if (FAILED(result)) return result;
+        return current->DragOver(keys, p, effect);
     }
     HRESULT STDMETHODCALLTYPE DragLeave() override {
-        HRESULT result = S_OK;
-        if (entered) { entered = false; result = original->DragLeave(); }
-        ResetData(); return result;
+        LeaveOriginal(); ResetData(); return S_OK;
     }
     HRESULT STDMETHODCALLTYPE Drop(IDataObject* incoming, DWORD keys, POINTL p, DWORD* effect) override {
-        if (!effect) return E_POINTER;
-        if (Block(p)) { LeaveOriginal(); ResetData(); *effect = DROPEFFECT_NONE; return S_OK; }
-        if (!entered) {
-            const HRESULT result = original->DragEnter(incoming, keys, p, effect);
-            if (FAILED(result)) { ResetData(); return result; }
-        }
-        entered = false;
-        const HRESULT result = original->Drop(incoming, keys, p, effect);
+        if (!effect || !incoming) return E_INVALIDARG;
+        const HRESULT enterResult = EnterTarget(incoming, keys, p, effect);
+        if (FAILED(enterResult)) { ResetData(); return enterResult; }
+        auto* target = current; current = nullptr;
+        const HRESULT result = target->Drop(incoming, keys, p, effect);
         ResetData(); return result;
     }
 };
@@ -339,12 +340,24 @@ bool EnsureDropGate() {
         RemoveDropGate();
         return false;
     }
+    Com<IDropTarget> background;
+    if (state.testHost) {
+        background.value = static_cast<IDropTarget*>(GetPropW(state.list, L"OpenFenestra.Test.BackgroundDropTarget"));
+        if (background) background->AddRef();
+    } else {
+        // Obtain the folder itself, never the invisible item's target. Resolve
+        // outside WM_COPYDATA and retain it on the desktop UI thread.
+        Com<IShellFolder> desktop;
+        if (SUCCEEDED(SHGetDesktopFolder(desktop.out())))
+            desktop->CreateViewObject(state.view, IID_PPV_ARGS(background.out()));
+    }
+    if (!background) return false;
     const HWND candidates[]{state.list, state.view, GetAncestor(state.view, GA_ROOT)};
     for (const HWND candidate : candidates) {
         if (!candidate || GetWindowThreadProcessId(candidate, nullptr) != GetCurrentThreadId()) continue;
         auto* original = static_cast<IDropTarget*>(GetPropW(candidate, L"OleDropTargetInterface"));
         if (!original) continue;
-        auto* gate = new DropGate(original);
+        auto* gate = new DropGate(original, background.value);
         if (FAILED(RevokeDragDrop(candidate))) { gate->Release(); continue; }
         if (SUCCEEDED(RegisterDragDrop(candidate, gate))) {
             state.drop = gate; state.dropWindow = candidate; return true;

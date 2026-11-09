@@ -149,6 +149,8 @@ void Run(HMODULE module, bool ownerData) {
     }
     for (int i = 0; i < 3; ++i) ListView_SetItemPosition32(list, i, 40 + 150 * i, 40);
     auto* original = new MockDrop;
+    auto* background = new MockDrop;
+    Check(SetPropW(list, L"OpenFenestra.Test.BackgroundDropTarget", background) != FALSE, "provide isolated desktop background target");
     Check(SUCCEEDED(RegisterDragDrop(list, original)), "register original test drop target");
     const auto originalProc = reinterpret_cast<WNDPROC>(GetWindowLongPtrW(list, GWLP_WNDPROC));
     using Attach = BOOL(WINAPI*)(HWND, HWND, const wchar_t*, DWORD);
@@ -209,20 +211,20 @@ void Run(HMODULE module, bool ownerData) {
     DWORD effect = DROPEFFECT_COPY;
     const auto hiddenPoint = ScreenItemPoint(list, 0);
     const auto visiblePoint = ScreenItemPoint(list, 1);
-    Check(SUCCEEDED(target->DragEnter(data, 0, hiddenPoint, &effect)) && effect == DROPEFFECT_NONE && original->enters == 0,
-        "hidden icon rejects native OLE entry");
+    Check(SUCCEEDED(target->DragEnter(data, 0, hiddenPoint, &effect)) && effect == DROPEFFECT_COPY && original->enters == 0 && background->enters == 1,
+        "hidden icon coordinates enter desktop background");
     effect = DROPEFFECT_COPY;
-    Check(SUCCEEDED(target->Drop(data, 0, hiddenPoint, &effect)) && effect == DROPEFFECT_NONE && original->drops == 0,
-        "hidden icon never receives a native OLE drop");
+    Check(SUCCEEDED(target->Drop(data, 0, hiddenPoint, &effect)) && effect == DROPEFFECT_COPY && original->drops == 0 && background->drops == 1,
+        "hidden icon coordinates drop on desktop background only");
     effect = DROPEFFECT_COPY;
     target->DragEnter(data, 0, visiblePoint, &effect);
     Check(effect == DROPEFFECT_COPY && original->enters == 1, "visible native OLE entry forwarded");
     effect = DROPEFFECT_COPY;
     target->DragOver(0, hiddenPoint, &effect);
-    Check(effect == DROPEFFECT_NONE && original->leaves == 1, "moving onto hidden icon clears original OLE target");
+    Check(effect == DROPEFFECT_COPY && original->leaves == 1 && background->enters == 2, "moving onto hidden icon switches to desktop background");
     effect = DROPEFFECT_COPY;
     target->DragOver(0, visiblePoint, &effect);
-    Check(effect == DROPEFFECT_COPY && original->enters == 2, "moving off hidden icon reenters original OLE target");
+    Check(effect == DROPEFFECT_COPY && original->enters == 2 && background->leaves == 1, "moving off hidden icon reenters original OLE target");
     target->Drop(data, 0, visiblePoint, &effect);
     Check(original->drops == 1, "visible native OLE drop forwarded");
     data->Release();
@@ -267,6 +269,8 @@ void Run(HMODULE module, bool ownerData) {
         "OLE protection loss restores native input");
     RevokeDragDrop(list); foreign->Release();
     original->Release();
+    RemovePropW(list, L"OpenFenestra.Test.BackgroundDropTarget");
+    background->Release();
     if (owner) DestroyWindow(owner);
     DestroyWindow(parent);
     std::printf("PASS %s ListView host\n", ownerData ? "owner-data" : "standard");

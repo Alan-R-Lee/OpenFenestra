@@ -141,7 +141,7 @@ internal static class SmokeTest
             Check(workspace.Store.Load().Groups[0].Name == "退出保存验证", "退出时立即保存待处理布局", checks);
             using (var loginWorkspace = new WorkspaceController(workspace.Store))
             {
-                loginWorkspace.Start(false, collapseOnStart: true);
+                loginWorkspace.Start(false, collapseOnStart: true, captureDesktop: false);
                 await Task.Delay(250);
                 var loginPanel = loginWorkspace.Panels.Single();
                 Check(loginPanel.Model.Collapsed && loginPanel.Height == 34 && !loginWorkspace.Manager.IsVisible,
@@ -151,6 +151,20 @@ internal static class SmokeTest
                 loginPanel.HandleHeaderClick(1);
                 Check(!loginPanel.Model.Collapsed && loginPanel.Height == 370 && ((ListBox)loginPanel.FindName("Items")).Items.Count == 4,
                     "登录折叠后单击恢复原展开高度", checks);
+                var inboxFile = Path.Combine(samples, "最近新增.txt"); File.WriteAllText(inboxFile, "inbox fixture");
+                var recent = RecentItems.Ensure(loginWorkspace.Layout)!;
+                RecentItems.Capture(loginWorkspace.Layout, [FileCatalog.Entry(inboxFile)]);
+                loginWorkspace.Notify();
+                await Task.Delay(150);
+                var recentPanel = loginWorkspace.Panels.Single(p => p.Model.IsRecent);
+                var organize = (Button)recentPanel.FindName("OrganizeRecentButton");
+                Check(organize.IsVisible && ((ListBox)recentPanel.FindName("Items")).Items.Count == 1,
+                    "最近分栏展示新增项目和一键归类按钮", checks);
+                Capture(recentPanel, Path.Combine(workspace.Store.DirectoryPath, "recent-preview.png"));
+                organize.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Check(recent.ActiveTab.Items.Count == 0 && loginWorkspace.Layout.Groups.Any(g => !g.IsRecent && g.ActiveTab.Items.Contains(inboxFile))
+                    && File.ReadAllText(inboxFile) == "inbox fixture",
+                    "一键归类按钮转移引用且保留原文件", checks);
             }
         }
         catch (Exception error) { workspace.Report(error); checks.Add("FAILED: " + error); exitCode = 1; }

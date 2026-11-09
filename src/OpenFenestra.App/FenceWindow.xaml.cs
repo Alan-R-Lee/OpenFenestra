@@ -75,6 +75,7 @@ public partial class FenceWindow : Window
     {
         Title = "OpenFenestra · " + Model.Name;
         GroupTitle.Text = Model.Name;
+        OrganizeRecentButton.Visibility = Model.IsRecent ? Visibility.Visible : Visibility.Collapsed;
         Accent.Background = Brush(Model.Color);
         RefreshAppearance();
         _applyingGeometry = true;
@@ -176,6 +177,8 @@ public partial class FenceWindow : Window
         catch (OperationCanceledException) when (load.IsCancellationRequested) { }
         catch (Exception error) { _workspace.Report(error); }
     }
+    private void OnOrganizeRecent(object sender, RoutedEventArgs e) => _workspace.OrganizeRecent(Model);
+
     private void OnSearchChanged(object sender, TextChangedEventArgs e) { if (Items is not null) RefreshItems(); }
     private void OnHeaderDown(object sender, MouseButtonEventArgs e)
     {
@@ -238,14 +241,14 @@ public partial class FenceWindow : Window
     }
     private void EditTab(FenceTab tab)
     {
-        var dialog = new TabDialog(tab) { Owner = this };
+        var dialog = new TabDialog(tab, allowPortal: !Model.IsRecent) { Owner = this };
         if (dialog.ShowDialog() == true) { dialog.Apply(tab); _workspace.Notify(); }
     }
     private void OnAddTab(object sender, RoutedEventArgs e)
     {
         if (Model.Tabs.Count >= 30) { MessageBox.Show(this, "最多支持 30 个标签页。", "OpenFenestra"); return; }
         var tab = new FenceTab { Name = "新标签页" };
-        var dialog = new TabDialog(tab) { Owner = this };
+        var dialog = new TabDialog(tab, allowPortal: !Model.IsRecent) { Owner = this };
         if (dialog.ShowDialog() == true) { dialog.Apply(tab); Model.Tabs.Add(tab); Model.SelectedTabId = tab.Id; _workspace.Notify(); }
     }
     private void AddFiles()

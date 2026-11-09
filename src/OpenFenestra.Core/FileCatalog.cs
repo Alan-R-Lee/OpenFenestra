@@ -91,6 +91,7 @@ public static class FileCatalog
         var targets = new Dictionary<string, Queue<FenceGroup>>(StringComparer.Ordinal);
         foreach (var existing in layout.Groups)
         {
+            if (existing.IsRecent) continue;
             if (existing.ActiveTab.IsPortal || existing.ActiveTab.Items.Count >= 10000) continue;
             if (!targets.TryGetValue(existing.Name, out var queue)) targets[existing.Name] = queue = new();
             queue.Enqueue(existing);

@@ -36,6 +36,7 @@ public sealed class UnsupportedLayoutVersionException(int version)
 
 public sealed class FenceGroup
 {
+    public bool IsRecent { get; set; }
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "新分组";
     public string Color { get; set; } = "#78B9A1";
@@ -125,6 +126,8 @@ public static class LayoutCodec
             }
             group.SelectedTabId = group.ActiveTab.Id;
         }
+        if (layout.Groups.Count(g => g.IsRecent) > 1 || layout.Groups.Any(g => g.IsRecent && g.Tabs.Any(t => t.IsPortal)))
+            throw new InvalidDataException("最近分栏只能有一个，且不能映射文件夹。");
         return layout;
     }
 

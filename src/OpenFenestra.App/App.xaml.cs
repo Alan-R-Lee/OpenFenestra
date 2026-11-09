@@ -69,7 +69,8 @@ public partial class App : Application
             if ((e.Args.Contains("--smoke-test") || e.Args.Contains("--integration-test")) && dataIndex < 0) throw new ArgumentException("界面测试必须提供独立的 --data-dir。");
             Workspace = new WorkspaceController(new LayoutStore(data));
             MainWindow = Workspace.Manager;
-            Workspace.Start(!e.Args.Contains("--tray"), collapseOnStart: e.Args.Contains("--autostart"));
+            Workspace.Start(!e.Args.Contains("--tray"), collapseOnStart: e.Args.Contains("--autostart"),
+                captureDesktop: !e.Args.Contains("--smoke-test") && !e.Args.Contains("--integration-test"));
             if (e.Args.Contains("--enable-startup")) Workspace.SetStartup(true);
             if (e.Args.Contains("--desktop-mode")) Workspace.SetDesktopIntegration(true);
             if (e.Args.Contains("--organize")) Workspace.OrganizeDesktop();

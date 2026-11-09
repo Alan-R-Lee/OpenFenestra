@@ -19,6 +19,49 @@ var image = Path.Combine(source, "Image.png"); File.WriteAllText(image, "fixture
 var folder = Path.Combine(source, "Folder"); Directory.CreateDirectory(folder);
 try
 {
+    Test("Recent captures unassigned items once and respects explicit desktop returns", () =>
+    {
+        var group = new FenceGroup(); group.ActiveTab.Items.Add(link);
+        var layout = new Layout { Groups = [group], DesktopItems = [image] };
+        Assert(RecentItems.Capture(layout, new[] { doc, link, image, folder }.Select(FileCatalog.Entry)) == 2);
+        var recent = layout.Groups.Single(g => g.IsRecent);
+        Assert(recent.ActiveTab.Items.SequenceEqual(new[] { doc, folder }));
+        Assert(RecentItems.Capture(layout, new[] { doc, folder }.Select(FileCatalog.Entry)) == 0);
+        DesktopAssignments.ReturnToDesktop(layout, [doc], new(10, 10));
+        Assert(RecentItems.Capture(layout, [FileCatalog.Entry(doc)]) == 0);
+        Assert(LayoutCodec.Decode(LayoutCodec.Encode(layout)).Groups.Single(g => g.IsRecent).Id == recent.Id);
+    });
+    Test("Recent organization transfers references and preserves manual assignments", () =>
+    {
+        var layout = new Layout();
+        RecentItems.Capture(layout, new[] { doc, link, image }.Select(FileCatalog.Entry));
+        var recent = layout.Groups.Single();
+        var manual = new FenceGroup { Name = "我的资料" }; layout.Groups.Add(manual);
+        DesktopAssignments.Collect(layout, manual.ActiveTab, [image]);
+        Assert(RecentItems.Organize(layout, recent) == 2);
+        Assert(recent.ActiveTab.Items.Count == 0 && manual.ActiveTab.Items.SequenceEqual(new[] { image }));
+        Assert(layout.Groups.Single(g => g.Name == "文档与笔记").ActiveTab.Items.Contains(doc));
+        Assert(File.ReadAllText(doc) == "fixture" && File.Exists(link));
+    });
+    Test("Recent organization retains unavailable and capacity-blocked references", () =>
+    {
+        var layout = new Layout(); var recent = RecentItems.Ensure(layout)!;
+        var missing = Path.Combine(source, "missing.txt");
+        recent.ActiveTab.Items.AddRange([doc, missing]);
+        for (var i = 1; i < 100; i++) layout.Groups.Add(new FenceGroup());
+        Assert(RecentItems.Organize(layout, recent) == 0);
+        Assert(recent.ActiveTab.Items.SequenceEqual(new[] { doc, missing }));
+        Assert(RecentItems.Ensure(layout) == recent);
+    });
+    Test("Recent respects group limits and rejects duplicate inboxes or folder mappings", () =>
+    {
+        var full = new Layout { Groups = Enumerable.Range(0, 100).Select(_ => new FenceGroup()).ToList() };
+        Assert(RecentItems.Ensure(full) is null && full.Groups.Count == 100);
+        var duplicate = new Layout { Groups = [new() { IsRecent = true }, new() { IsRecent = true }] };
+        Throws(() => LayoutCodec.Decode(LayoutCodec.Encode(duplicate)));
+        duplicate.Groups.RemoveAt(1); duplicate.Groups[0].ActiveTab.FolderPath = source;
+        Throws(() => LayoutCodec.Decode(LayoutCodec.Encode(duplicate)));
+    });
     Test("Batch collection preserves input order, unrelated items and read-only portals", () =>
     {
         var items = Enumerable.Range(1, 10000).Select(i => "::{" + new Guid(i, 0, 0, new byte[8]).ToString("D").ToUpperInvariant() + "}").ToArray();

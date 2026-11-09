@@ -55,7 +55,7 @@ internal sealed class GroupDialog : EditorDialog
         {
             if (string.IsNullOrWhiteSpace(_name.Text)) { MessageBox.Show(this, "请填写分组名称。", "OpenFenestra"); return; }
             DialogResult = true;
-        }, allowDelete ? () => { DeleteRequested = true; DialogResult = false; } : null);
+        }, allowDelete && !group.IsRecent ? () => { DeleteRequested = true; DialogResult = false; } : null);
     }
     internal void Apply(FenceGroup group)
     { group.Name = _name.Text.Trim(); group.Color = Colors[_color.SelectedIndex].Color; group.Opacity = _opacity.Value; group.CollapsedOpacity = _collapsedOpacity.Value; group.IconSize = _iconSize.SelectedItem is int size ? size : 48; group.Locked = _locked.IsChecked == true; }
@@ -64,13 +64,14 @@ internal sealed class GroupDialog : EditorDialog
 internal sealed class TabDialog : EditorDialog
 {
     private readonly TextBox _name, _folder;
-    internal TabDialog(FenceTab tab) : base("编辑标签页")
+    internal TabDialog(FenceTab tab, bool allowPortal = true) : base("编辑标签页")
     {
         Label("标签页名称"); _name = Input(tab.Name); _name.MaxLength = 80;
         Label("映射文件夹（可选）"); _folder = Input(tab.FolderPath ?? "");
         var browse = new Button { Content = "浏览文件夹…", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 10, 0, 0) };
         browse.Click += (_, _) => { var picker = new Microsoft.Win32.OpenFolderDialog(); if (picker.ShowDialog(this) == true) _folder.Text = picker.FolderName; };
         Fields.Children.Add(browse);
+        _folder.IsEnabled = browse.IsEnabled = allowPortal;
         Hint("留空：收纳文件引用。选择文件夹：只读展示实时内容。切换映射不会删除此前保存的引用。");
         Buttons(() =>
         {

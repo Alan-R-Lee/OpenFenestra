@@ -39,8 +39,9 @@ internal static class DesktopIntegrationTest
             await WaitForCount(workspace.Desktop, 1);
             Check(workspace.Desktop.HiddenCount == 1, "收纳后同一原生项目逐项停止绘制", checks);
             Check(NativeDesktopShell.ReadSnapshot().Items.Any(i => i.Path.Equals(source.Path, StringComparison.OrdinalIgnoreCase)), "原 Shell 项目和原文件仍存在", checks);
-            var payload = new DesktopDrag([source.Path]).Data(false);
-            Check(DesktopDrag.Read(payload).Single() == source.Path && !payload.GetDataPresent(DataFormats.FileDrop), "内部拖拽不触发 Explorer 复制或删除源文件", checks);
+            var payload = new DesktopDrag([source.Path]).Data();
+            Check(DesktopDrag.Read(payload).Single() == source.Path && payload.GetDataPresent(DataFormats.FileDrop)
+                && bytes.SequenceEqual(File.ReadAllBytes(source.Path)), "拖出数据同时提供文件互操作格式与私有身份且不改写源文件", checks);
             var screenPoint = NativeDesktopShell.ViewToScreen(source.Position);
             workspace.ReturnToDesktop([source.Path], new(screenPoint.X, screenPoint.Y));
             await WaitForCount(workspace.Desktop, 0);
