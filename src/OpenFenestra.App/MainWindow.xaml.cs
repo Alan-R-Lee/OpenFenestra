@@ -39,7 +39,10 @@ public partial class MainWindow : Window
                     $"{g.Tabs.Count} 个标签页  ·  {g.Tabs.Sum(t => t.Items.Count)} 个引用  ·  " + (g.Locked ? "已锁定" : "可自由移动"), g.Visible ? "隐藏" : "显示")).ToList();
             EmptyState.Visibility = groups.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             PinSetting.IsChecked = _workspace.Layout.PinToDesktop;
-            AutoSetting.IsChecked = _workspace.Layout.AutoOrganize;
+            IdleCollapseSetting.IsChecked = _workspace.Layout.AutoCollapseIdle;
+            ArrangementSetting.SelectedIndex = (int)_workspace.Layout.Arrangement;
+            var workArea = SystemParameters.WorkArea;
+            ArrangementCapacity.Text = $"当前主屏幕网格容量：{PanelArrangement.Grid(0, new(workArea.X, workArea.Y, workArea.Width, workArea.Height)).Capacity} 栏；折叠栏架支持滚动。";
             DesktopSetting.IsChecked = _workspace.Layout.DesktopIntegrationEnabled;
             StartupSetting.IsChecked = StartupRegistration.IsEnabled();
             StatusText.Text = _workspace.Status;
@@ -54,6 +57,7 @@ public partial class MainWindow : Window
         }
         finally { _rendering = false; }
     }
+    internal void NavigateToSettings() => SettingsNavigation.IsChecked = true;
     private void OnNavigate(object sender, RoutedEventArgs e)
     {
         if (GroupsPage is null || SnapshotsPage is null || GuidePage is null || SettingsPage is null) return;
@@ -166,13 +170,17 @@ public partial class MainWindow : Window
     }
     private void OnOrganize(object sender, RoutedEventArgs e) => _workspace.OrganizeDesktop();
     private void OnTray(object sender, RoutedEventArgs e) => Hide();
+    private void OnIdleCollapseChanged(object sender, RoutedEventArgs e)
+    { if (!_rendering) { _workspace.Layout.AutoCollapseIdle = IdleCollapseSetting.IsChecked == true; _workspace.Notify("自动收起设置已保存"); } }
+    private void OnArrangementChanged(object sender, SelectionChangedEventArgs e)
+    { if (!_rendering && ArrangementSetting.SelectedIndex >= 0) _workspace.SetArrangement((PanelArrangementMode)ArrangementSetting.SelectedIndex); }
     private void OnArrange(object sender, RoutedEventArgs e) => _workspace.ArrangePanels();
     private void OnCollapseAll(object sender, RoutedEventArgs e) => _workspace.CollapseAll(true);
     private void OnExpandAll(object sender, RoutedEventArgs e) => _workspace.CollapseAll(false);
     private void OnExitApp(object sender, RoutedEventArgs e) => _workspace.Exit();
     private void OnSearch(object sender, TextChangedEventArgs e) { if (GroupCards is not null) Render(); }
     private void OnSettings(object sender, RoutedEventArgs e)
-    { if (!_rendering) _workspace.UpdateSettings(PinSetting.IsChecked == true, AutoSetting.IsChecked == true); }
+    { if (!_rendering) _workspace.UpdateSettings(PinSetting.IsChecked == true, _workspace.Layout.AutoOrganize); }
     private void OnDesktopSetting(object sender, RoutedEventArgs e)
     { if (!_rendering) _workspace.SetDesktopIntegration(DesktopSetting.IsChecked == true); }
     private void OnStartupSetting(object sender, RoutedEventArgs e)

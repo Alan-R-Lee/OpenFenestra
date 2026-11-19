@@ -116,6 +116,7 @@ public static class FileCatalog
             // known already includes every ordinary tab. New entries cannot need
             // a transfer scan; append once instead of rescanning the growing layout.
             group.ActiveTab.Items.Add(path);
+            ItemActivityTracking.RecordAdded(layout, path);
             if (group.ActiveTab.Items.Count >= 10000) candidates.Dequeue();
             known.Add(path); added++;
         }

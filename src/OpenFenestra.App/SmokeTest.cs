@@ -18,6 +18,7 @@ internal static class SmokeTest
         try
         {
             if (workspace.Layout.Groups.Count > 0) throw new InvalidOperationException("请为测试提供一个空的数据目录。");
+            workspace.Layout.AutoCollapseIdle = false;
             var samples = Path.Combine(workspace.Store.DirectoryPath, "sample-files");
             var folder = Path.Combine(samples, "灵感资料");
             Directory.CreateDirectory(folder);
@@ -37,8 +38,29 @@ internal static class SmokeTest
             var addTab = (Button)panel.FindName("AddTabButton");
             Check(group.Tabs.Count == 1 && tabBar.IsVisible && addTab.IsVisible && addTab.IsEnabled,
                 "单标签页仍显示可用的添加按钮", checks);
-            var otherGroup = new FenceGroup { Name = "透明度验证", Collapsed = true };
+            var otherGroup = new FenceGroup { Name = "透明度验证", Collapsed = true, X = 100000, Y = 100000 };
             workspace.AddGroup(otherGroup);
+            await Task.Delay(100);
+            var recoveredPanel = workspace.Panels.Single(p => p.Model == otherGroup);
+            workspace.Notify();
+            Check(otherGroup.X < 100000 && otherGroup.Y < 100000 && recoveredPanel.Left == otherGroup.X
+                && recoveredPanel.Top == otherGroup.Y, "屏幕外分栏恢复位置写回布局且刷新后仍可见", checks);
+            using (var nativeMenu = new ShellContextMenu.Session(note))
+                Check(nativeMenu.CommandCount > 0, "真实文件的 Windows Shell 菜单可构建", checks);
+            using (var nativeMenu = new ShellContextMenu.Session(folder))
+                Check(nativeMenu.CommandCount > 0, "文件夹的 Windows Shell 菜单可构建", checks);
+            using (var nativeMenu = new ShellContextMenu.Session("::{645FF040-5081-101B-9F08-00AA002F954E}"))
+                Check(nativeMenu.CommandCount > 0, "虚拟回收站的 Windows Shell 菜单可构建", checks);
+            var merged = ShellFiles.MergeDesktopEntries([samples, folder], [new DesktopEntry(note, "Shell 名称", false)]);
+            Check(merged.Count(e => e.Path == note) == 1 && merged.Single(e => e.Path == note).Name == "Shell 名称"
+                && merged.Any(e => e.Path == folder), "目录先于 Explorer 更新时仍能发现文件与文件夹并按完整路径消重", checks);
+            var container = (ListBoxItem)((ListBox)panel.FindName("Items")).ItemContainerGenerator.ContainerFromIndex(0);
+            for (var click = 0; click < 2; click++)
+                container.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,
+                    Environment.TickCount, System.Windows.Input.MouseButton.Right) { RoutedEvent = UIElement.PreviewMouseRightButtonUpEvent });
+            Check(panel.AppItemMenu?.IsOpen == true && panel.AppItemMenu.Items.OfType<MenuItem>()
+                .Any(i => (string)i.Header == "放回桌面（保留原文件）"), "双击右键路由打开本应用项目菜单", checks);
+            panel.AppItemMenu!.IsOpen = false;
             var previousPosition = new Point(panel.Left, panel.Top);
             workspace.ReorderGroup(otherGroup.Id, group.Id, false);
             Check(workspace.Layout.Groups[0].Id == otherGroup.Id
@@ -153,8 +175,13 @@ internal static class SmokeTest
                     "登录折叠后单击恢复原展开高度", checks);
                 var inboxFile = Path.Combine(samples, "最近新增.txt"); File.WriteAllText(inboxFile, "inbox fixture");
                 var recent = RecentItems.Ensure(loginWorkspace.Layout)!;
-                RecentItems.Capture(loginWorkspace.Layout, [FileCatalog.Entry(inboxFile)]);
-                loginWorkspace.Notify();
+                loginWorkspace.Layout.AutoOrganize = true;
+                var groupCount = loginWorkspace.Layout.Groups.Count;
+                Check(loginWorkspace.CaptureRecent([FileCatalog.Entry(inboxFile)]) == 1
+                    && recent.ActiveTab.Items.Contains(inboxFile) && loginWorkspace.Layout.Groups.Count == groupCount,
+                    "旧自动归类设置开启时新增项目仍留在最近且不创建类型分栏", checks);
+                Check(loginWorkspace.CaptureRecent([FileCatalog.Entry(inboxFile)]) == 0,
+                    "周期补扫不重复收纳最近项目", checks);
                 await Task.Delay(150);
                 var recentPanel = loginWorkspace.Panels.Single(p => p.Model.IsRecent);
                 var organize = (Button)recentPanel.FindName("OrganizeRecentButton");
@@ -165,6 +192,148 @@ internal static class SmokeTest
                 Check(recent.ActiveTab.Items.Count == 0 && loginWorkspace.Layout.Groups.Any(g => !g.IsRecent && g.ActiveTab.Items.Contains(inboxFile))
                     && File.ReadAllText(inboxFile) == "inbox fixture",
                     "一键归类按钮转移引用且保留原文件", checks);
+                var firstDestination = loginWorkspace.Panels.Single(p => !p.Model.IsRecent && p.Model.ActiveTab.Items.Contains(inboxFile));
+                Check(!firstDestination.Model.Collapsed && firstDestination.IsVisible
+                    && ((ListBox)firstDestination.FindName("Items")).SelectedItem is EntryView { IsLocated: true } located && located.Path == inboxFile,
+                    "一键归类后自动展开目标分栏并选中高亮新图标", checks);
+                var document = Path.Combine(samples, "第二批文档.txt"); File.WriteAllText(document, "document fixture");
+                var picture = Path.Combine(samples, "第二批图片.png"); File.WriteAllBytes(picture, [1, 2, 3]);
+                var link = Path.Combine(samples, "第二批快捷方式.url"); File.WriteAllText(link, "[InternetShortcut]\nURL=https://example.com");
+                var unavailable = Path.Combine(samples, "尚未同步.txt");
+                var apps = new FenceGroup { Name = "应用与快捷方式", Visible = false, Collapsed = true, X = 500, Y = 120, ItemSort = ItemSortOrder.Original };
+                apps.ActiveTab.Name = "应用";
+                apps.ActiveTab.Items.AddRange(Enumerable.Range(0, 301).Select(i => Path.Combine(samples, $"旧引用-{i}.lnk")));
+                var alternateTab = new FenceTab { Name = "另一页" }; apps.Tabs.Add(alternateTab);
+                loginWorkspace.AddGroup(apps);
+                firstDestination.Model.Collapsed = true;
+                ((TextBox)firstDestination.FindName("Search")).Text = "此前的搜索条件";
+                loginWorkspace.CaptureRecent(new[] { document, picture, link }.Select(FileCatalog.Entry));
+                recent.ActiveTab.Items.Add(unavailable);
+                organize.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                await Task.Delay(150);
+                var destinationLinks = (WrapPanel)recentPanel.FindName("DestinationLinks");
+                Check(destinationLinks.Children.Count == 3 && recent.ActiveTab.Items.SequenceEqual([unavailable])
+                    && ((TextBlock)recentPanel.FindName("LocationText")).Text.Contains("1 个留在最近"),
+                    "混合类型批次显示各自去向且未成功归类的引用留在最近", checks);
+                var appsPanel = loginWorkspace.Panels.Single(p => p.Model == apps);
+                var appItems = (ListBox)appsPanel.FindName("Items");
+                Check(appsPanel.IsVisible && !apps.Collapsed && appItems.Items.Count == 300
+                    && appItems.Items[0] is EntryView { IsLocated: true } newApp && newApp.Path == link
+                    && apps.ActiveTab.Items[^1] == link,
+                    "超过300项的隐藏折叠分栏展开后优先展示新增图标且保存顺序保持", checks);
+                Check(((ListBox)firstDestination.FindName("Items")).Items.OfType<EntryView>().Where(v => v.IsLocated)
+                    .Select(v => v.Path).SequenceEqual([document]) && ((TextBox)firstDestination.FindName("Search")).Text == "",
+                    "新批次替换旧高亮并清除妨碍定位的搜索条件", checks);
+                Capture(recentPanel, Path.Combine(workspace.Store.DirectoryPath, "organization-destinations-preview.png"));
+                Capture(appsPanel, Path.Combine(workspace.Store.DirectoryPath, "located-items-preview.png"));
+                var appLink = destinationLinks.Children.OfType<Button>().Single(b => b.Content.ToString()!.StartsWith("应用与快捷方式 /"));
+                apps.SelectedTabId = alternateTab.Id; apps.Collapsed = true; apps.Visible = false;
+                ((TextBox)appsPanel.FindName("Search")).Text = "不会匹配";
+                loginWorkspace.Notify();
+                appLink.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Check(apps.Visible && !apps.Collapsed && apps.ActiveTab != alternateTab
+                    && ((TextBox)appsPanel.FindName("Search")).Text == ""
+                    && appItems.SelectedItem is EntryView { IsLocated: true } selectedApp && selectedApp.Path == link,
+                    "点击去向重新显示目标分栏并切回对应标签页和图标", checks);
+                ((Button)appsPanel.FindName("ClearLocationButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Check(((Border)appsPanel.FindName("LocationArea")).Visibility == Visibility.Collapsed
+                    && appItems.Items.OfType<EntryView>().All(v => !v.IsLocated)
+                    && appItems.Items.OfType<EntryView>().First().Path == apps.ActiveTab.Items[0],
+                    "清除定位恢复原显示顺序并移除高亮提示", checks);
+                DesktopAssignments.Collect(loginWorkspace.Layout, firstDestination.Model.ActiveTab, [link]);
+                appLink.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Check(loginWorkspace.Status.Contains("归属已变化") && File.ReadAllText(document) == "document fixture",
+                    "旧去向中的项目改属后提示变化并保留源文件", checks);
+                var documentItems = (ListBox)firstDestination.FindName("Items");
+                Check(documentItems.Items.OfType<EntryView>().Single(v => v.Path == document).IsNew,
+                    "新加入的图标持续显示新增标记", checks);
+                var sortButton = (Button)firstDestination.FindName("SortButton");
+                sortButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                var frequentOption = sortButton.ContextMenu!.Items.OfType<MenuItem>().Single(i => (string)i.Header == "常用优先");
+                frequentOption.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)); sortButton.ContextMenu.IsOpen = false;
+                ((Button)firstDestination.FindName("ClearLocationButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                loginWorkspace.RecordItemOpened(inboxFile); loginWorkspace.RecordItemOpened(inboxFile);
+                await Task.Delay(150);
+                Trace("activity sort: " + firstDestination.Model.ItemSort + " collapsed=" + firstDestination.Model.Collapsed + " views="
+                    + JsonSerializer.Serialize(documentItems.Items.OfType<EntryView>().Select(v => new { v.Name, v.OpenCount, v.IsNew, v.IsLocated })));
+                Check(firstDestination.Model.ItemSort == ItemSortOrder.FrequentFirst
+                    && documentItems.Items[0] is EntryView { OpenCount: 2, IsNew: false } popular && popular.Path == inboxFile
+                    && documentItems.Items.OfType<EntryView>().Single(v => v.Path == document).IsNew,
+                    "常用优先按本机打开次数排序且未使用的新图标保留新增标记", checks);
+                sortButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                sortButton.ContextMenu!.Items.OfType<MenuItem>().Single(i => (string)i.Header == "新加入优先")
+                    .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)); sortButton.ContextMenu.IsOpen = false;
+                Check(documentItems.Items[0] is EntryView { IsNew: true }, "排序菜单可切换到新加入优先", checks);
+                try { loginWorkspace.OpenItem(unavailable); }
+                catch (FileNotFoundException) { }
+                Check(!loginWorkspace.Layout.ItemActivity.ContainsKey(unavailable), "打开失败不会计入使用次数", checks);
+                loginWorkspace.SaveNow();
+                var savedActivity = loginWorkspace.Store.Load();
+                Check(savedActivity.ItemActivity[inboxFile].OpenCount == 2
+                    && savedActivity.Groups.Single(g => g.Id == firstDestination.Model.Id).ItemSort == ItemSortOrder.NewestFirst,
+                    "使用次数和分栏排序偏好可保存恢复", checks);
+                Capture(firstDestination, Path.Combine(workspace.Store.DirectoryPath, "new-items-and-sort-preview.png"));
+                loginWorkspace.SetArrangement(PanelArrangementMode.Free);
+                {
+                    var sizeDialog = new GroupDialog(firstDestination.Model);
+                    sizeDialog.WidthInput.Text = "224"; sizeDialog.HeightInput.Text = "280";
+                    sizeDialog.Apply(firstDestination.Model); loginWorkspace.Notify();
+                    Check(firstDestination.Width == 224 && firstDestination.Height == 280,
+                        "分栏编辑器可精确设置独立宽高并支持更窄分栏", checks);
+                    sizeDialog.WidthInput.Text = "NaN";
+                    Check(!sizeDialog.TryDimensions(out _, out _), "分栏尺寸拒绝无效数值", checks);
+                    sizeDialog.Close();
+                }
+                ((System.Windows.Controls.Primitives.Thumb)firstDestination.FindName("ResizeGrip")).RaiseEvent(
+                    new System.Windows.Controls.Primitives.DragDeltaEventArgs(16, 20) { RoutedEvent = System.Windows.Controls.Primitives.Thumb.DragDeltaEvent });
+                Check(firstDestination.Model.Width == 240 && firstDestination.Model.Height == 300,
+                    "右下角拖拽缩放独立更新并保存分栏尺寸", checks);
+                var freeGeometry = loginWorkspace.Layout.Groups.ToDictionary(g => g.Id, g => new PanelBounds(g.X, g.Y, g.Width, g.Height, g.Collapsed));
+                var arrangement = (ComboBox)loginWorkspace.Manager.FindName("ArrangementSetting");
+                arrangement.SelectedIndex = (int)PanelArrangementMode.CompactGrid;
+                Check(loginWorkspace.Layout.Arrangement == PanelArrangementMode.CompactGrid
+                    && loginWorkspace.Layout.FreePlacements[firstDestination.Model.Id] == freeGeometry[firstDestination.Model.Id],
+                    "设置页切换紧凑网格且单独保存自由布局", checks);
+                loginWorkspace.ShowManager(); loginWorkspace.Manager.NavigateToSettings();
+                await Task.Delay(150);
+                Capture(loginWorkspace.Manager, Path.Combine(workspace.Store.DirectoryPath, "arrangement-settings-preview.png"));
+                loginWorkspace.Manager.Hide();
+                arrangement.SelectedIndex = (int)PanelArrangementMode.Shelf;
+                Check(loginWorkspace.Shelf?.IsVisible == true && loginWorkspace.Panels.All(p => !p.IsVisible)
+                    && loginWorkspace.Shelf.GroupButtons.Count() == loginWorkspace.Layout.Groups.Count(g => g.Visible),
+                    "折叠栏架保留所有标题并收起内容窗口", checks);
+                loginWorkspace.Shelf!.GroupButtons.First().RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Check(loginWorkspace.Panels.Count(p => p.IsVisible) == 1,
+                    "点击栏架标题只展开一个对应分栏", checks);
+                loginWorkspace.Shelf.GroupButtons.Last().RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                var openPanel = loginWorkspace.Panels.Single(p => p.IsVisible);
+                Check(openPanel.Model == loginWorkspace.Layout.Groups.Last(g => g.Visible)
+                    && openPanel.Left + openPanel.Width < loginWorkspace.Shelf.Left,
+                    "栏架切换时收起上一栏且内容在架旁展开", checks);
+                Capture(loginWorkspace.Shelf, Path.Combine(workspace.Store.DirectoryPath, "shelf-preview.png"));
+                loginWorkspace.SaveNow();
+                Check(loginWorkspace.Store.Load().Arrangement == PanelArrangementMode.Shelf,
+                    "栏架模式和自由布局备份可保存恢复", checks);
+                arrangement.SelectedIndex = (int)PanelArrangementMode.Free;
+                Trace("restore free geometry: " + JsonSerializer.Serialize(loginWorkspace.Layout.Groups.Select(g => new { g.Name, Expected = freeGeometry[g.Id], Actual = new PanelBounds(g.X, g.Y, g.Width, g.Height, g.Collapsed) })));
+                Check(loginWorkspace.Layout.Groups.All(g => freeGeometry[g.Id] == new PanelBounds(g.X, g.Y, g.Width, g.Height, g.Collapsed))
+                    && loginWorkspace.Shelf.IsVisible == false,
+                    "切回自由排布恢复原位置宽高与折叠状态", checks);
+                for (var index = 0; index < 30; index++) loginWorkspace.Layout.Groups.Add(new FenceGroup { Name = "示例分栏 " + (index + 1) });
+                loginWorkspace.SetArrangement(PanelArrangementMode.Shelf);
+                Check(loginWorkspace.Shelf.Height <= SystemParameters.WorkArea.Height - 24 && loginWorkspace.Shelf.GroupButtons.Count() > 12,
+                    "超过十二分栏时栏架通过滚动列表保持窗口在工作区内", checks);
+                Capture(loginWorkspace.Shelf, Path.Combine(workspace.Store.DirectoryPath, "shelf-many-preview.png"));
+                loginWorkspace.SetArrangement(PanelArrangementMode.Free);
+                loginWorkspace.Layout.AutoCollapseIdle = true;
+                loginWorkspace.SetArrangement(PanelArrangementMode.Shelf);
+                loginWorkspace.Shelf!.GroupButtons.First().RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Check(loginWorkspace.Panels.Count(p => p.IsVisible) == 1, "闲置收起启用后栏架标题仍可正常展开", checks);
+                await Task.Delay(5500);
+                Check(loginWorkspace.Panels.All(p => !p.IsVisible) && loginWorkspace.Shelf.IsVisible,
+                    "栏架展开后五秒无操作自动收起并保留标题列表", checks);
+
+
             }
         }
         catch (Exception error) { workspace.Report(error); checks.Add("FAILED: " + error); exitCode = 1; }

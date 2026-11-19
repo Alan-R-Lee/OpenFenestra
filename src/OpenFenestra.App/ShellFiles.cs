@@ -113,6 +113,24 @@ internal static class ShellFiles
     internal static DesktopEntry Entry(string path) => Volatile.Read(ref _desktopNames).TryGetValue(path, out var entry) ? entry : FileCatalog.Entry(path);
     internal static DesktopEntry Entry(DesktopEntry entry) => Volatile.Read(ref _desktopNames).TryGetValue(entry.Path, out var named) ? named : entry;
 
+    internal static IReadOnlyList<DesktopEntry> DesktopItemsForCapture()
+    {
+        // Directory entries can arrive before Explorer publishes its updated view.
+        IReadOnlyList<DesktopEntry> shell = [];
+        try { shell = DesktopItems(); }
+        catch (Exception error) { Debug.WriteLine(error); } // Shell startup must not block filesystem capture.
+        return MergeDesktopEntries(WorkspaceController.DesktopPaths, shell);
+    }
+
+    internal static IReadOnlyList<DesktopEntry> MergeDesktopEntries(IEnumerable<string> directories, IEnumerable<DesktopEntry> shell)
+    {
+        var entries = new Dictionary<string, DesktopEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var directory in directories)
+            foreach (var path in FileCatalog.ReadFolder(directory)) entries[path] = FileCatalog.Entry(path);
+        foreach (var entry in shell) entries[entry.Path] = entry;
+        return entries.Values.ToArray();
+    }
+
     internal static void Open(string path)
     {
         if (DesktopAssignments.IsVirtual(path))
