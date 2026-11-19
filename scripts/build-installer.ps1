@@ -15,6 +15,17 @@ if (-not $CompilerPath) {
 if (-not $CompilerPath) { throw 'Install Inno Setup 6.5+ or pass -CompilerPath to ISCC.exe.' }
 [xml]$project = Get-Content 'src/OpenFenestra.App/OpenFenestra.App.csproj' -Raw
 $version = [string]$project.Project.PropertyGroup.Version | Where-Object { $_ }
+$expectedVersion = [version]$version
+$expectedBinaryVersion = [version]::new($expectedVersion.Major, $expectedVersion.Minor, [Math]::Max(0, $expectedVersion.Build), [Math]::Max(0, $expectedVersion.Revision))
+function Assert-ProductVersion([string]$BinaryPath) {
+    $info = (Get-Item -LiteralPath $BinaryPath).VersionInfo
+    $binaryVersion = [version]::new($info.FileMajorPart, $info.FileMinorPart, $info.FileBuildPart, $info.FilePrivatePart)
+    $productVersion = ([string]$info.ProductVersion).Trim().Split('+')[0]
+    if ($binaryVersion -ne $expectedBinaryVersion -or $productVersion -ne $version) {
+        throw "Version mismatch in $BinaryPath. Rebuild the payload and installer from version $version."
+    }
+}
+
 $dotnet = if (Test-Path '.tools\dotnet\dotnet.exe') { Join-Path $projectRoot '.tools\dotnet\dotnet.exe' } else { (Get-Command dotnet -ErrorAction Stop).Source }
 $light = Join-Path $projectRoot 'artifacts\OpenFenestra-light-win-x64'
 & $dotnet publish src/OpenFenestra.App/OpenFenestra.App.csproj -c Release -r win-x64 --self-contained false -p:EnableNativeShellBridge=true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o $light
@@ -27,8 +38,10 @@ foreach ($name in @('README.md','LICENSE','THIRD_PARTY_NOTICES.md','CONTRIBUTING
 $output = Join-Path $projectRoot 'artifacts'
 foreach ($variant in @('Light','Offline')) {
     $payload = if ($variant -eq 'Light') { $light } else { $full }
+    Assert-ProductVersion (Join-Path $payload 'OpenFenestra.exe')
     & $CompilerPath "/DAppVersion=$version" "/DVariant=$variant" "/DPayloadDir=$payload" "/DOutputDir=$output" 'installer/OpenFenestra.iss'
     if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed: $variant" }
+    Assert-ProductVersion (Join-Path $output "OpenFenestra-$version-Setup-$variant-x64.exe")
 }
 $assets = @("OpenFenestra-$version-Setup-Light-x64.exe", "OpenFenestra-$version-Setup-Offline-x64.exe", 'OpenFenestra-win-x64.zip')
 $lines = foreach ($name in $assets) {

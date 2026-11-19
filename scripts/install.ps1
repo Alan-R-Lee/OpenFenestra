@@ -6,10 +6,10 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT' -or [Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne [Runtime.InteropServices.Architecture]::X64) {
-    throw 'The OpenFenestra 0.3 native desktop package requires Windows x64. ARM64 is not supported by this installer.'
+    throw 'The OpenFenestra native desktop package requires Windows x64. ARM64 is not supported by this installer.'
 }
 $windowsBuild = [int](Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name CurrentBuildNumber).CurrentBuildNumber
-if ($windowsBuild -lt 22000) { throw 'The OpenFenestra 0.3 native desktop package requires Windows 11.' }
+if ($windowsBuild -lt 22000) { throw 'The OpenFenestra native desktop package requires Windows 11.' }
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $sourceDirectory = Join-Path $projectRoot 'artifacts\OpenFenestra-win-x64'
 $sourceExe = Join-Path $sourceDirectory 'OpenFenestra.exe'

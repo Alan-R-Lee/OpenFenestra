@@ -6,6 +6,10 @@
 AppId={{E750B846-31E7-4FCF-926B-C40901F019B8}
 AppName=OpenFenestra
 AppVersion={#AppVersion}
+VersionInfoVersion={#AppVersion}
+VersionInfoTextVersion={#AppVersion}.0
+VersionInfoProductVersion={#AppVersion}
+VersionInfoProductTextVersion={#AppVersion}
 AppPublisher=Alan-R-Lee and contributors
 AppPublisherURL=https://github.com/Alan-R-Lee/OpenFenestra
 AppSupportURL=https://github.com/Alan-R-Lee/OpenFenestra/issues

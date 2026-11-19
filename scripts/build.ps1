@@ -1,7 +1,7 @@
 param([ValidateSet('win-x64','win-arm64')][string]$Runtime = 'win-x64')
 $ErrorActionPreference = 'Stop'
 if ($Runtime -ne 'win-x64') {
-    throw 'OpenFenestra 0.3 native desktop releases support Windows 11 x64 only. ARM64 is not packaged with an x64 bridge. A managed-only build can use dotnet publish -p:EnableNativeShellBridge=false.'
+    throw 'OpenFenestra native desktop releases support Windows 11 x64 only. ARM64 is not packaged with an x64 bridge. A managed-only build can use dotnet publish -p:EnableNativeShellBridge=false.'
 }
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
