@@ -19,6 +19,112 @@ var image = Path.Combine(source, "Image.png"); File.WriteAllText(image, "fixture
 var folder = Path.Combine(source, "Folder"); Directory.CreateDirectory(folder);
 try
 {
+    Test("Idle collapse arms only after expansion and waits five idle seconds", () =>
+    {
+        var idle = new IdleCollapse(false); idle.StateChanged(false, true, 0); Assert(!idle.IsDue(99999, false));
+        idle.StateChanged(true, true, 0); idle.StateChanged(false, true, 100);
+        Assert(!idle.IsDue(5099, false) && idle.IsDue(5100, false));
+        idle.Activity(4000); Assert(!idle.IsDue(8999, false) && idle.IsDue(9000, false));
+    });
+    Test("Menus drag and disabled idle collapse pause the deadline", () =>
+    {
+        var idle = new IdleCollapse(true); idle.StateChanged(false, true, 0);
+        Assert(!idle.IsDue(10000, true) && !idle.IsDue(14999, false) && idle.IsDue(15000, false));
+        idle.StateChanged(false, false, 10000); Assert(!idle.IsDue(99999, false));
+        idle.StateChanged(true, true, 10000); idle.StateChanged(false, true, 11000); Assert(idle.Armed);
+    });
+    Test("Compact grid fits twenty panels without overlaps in a laptop workspace", () =>
+    {
+        var area = new PanelBounds(0, 0, 1493, 885); var plan = PanelArrangement.Grid(20, area);
+        Assert(plan.Cells.Count == 20 && plan.Capacity == 24);
+        foreach (var a in plan.Cells)
+        {
+            Assert(a.Width >= 220 && a.Height >= 180 && a.X >= 0 && a.Y >= 0 && a.X + a.Width <= area.Width && a.Y + a.Height <= area.Height);
+            foreach (var b in plan.Cells.Where(b => !ReferenceEquals(a, b)))
+                Assert(a.X + a.Width <= b.X || b.X + b.Width <= a.X || a.Y + a.Height <= b.Y || b.Y + b.Height <= a.Y);
+        }
+    });
+    Test("Compact grid handles negative monitor origins and refuses overflow", () =>
+    {
+        var area = new PanelBounds(-1600, 40, 1280, 720);
+        var plan = PanelArrangement.Grid(10, area);
+        Assert(plan.Cells.Count == 10 && plan.Cells.All(c => c.X >= -1600 && c.X + c.Width <= -320 && c.Y >= 40 && c.Y + c.Height <= 760));
+        Assert(PanelArrangement.Grid(100, area).Cells.Count == 0 && PanelArrangement.Grid(0, area).Cells.Count == 0);
+    });
+    Test("Shelf popup fits beside its rack and preserves requested dimensions", () =>
+    {
+        var group = new FenceGroup { Width = 600, Height = 1800, Y = 5000 };
+        var popup = PanelArrangement.ShelfPopup(new(0, 0, 1493, 885), new(1261, 12, 220, 800), group);
+        Assert(popup.X + popup.Width < 1261 && popup.Y + popup.Height <= 873 && group.Height == 1800 && group.Y == 5000);
+    });
+    Test("Arrangement preferences and independent free bounds survive layout round trips", () =>
+    {
+        var layout = new Layout { Arrangement = PanelArrangementMode.Shelf };
+        layout.FreePlacements["example"] = new(17, 38, 224, 260, true);
+        var restored = layout.Clone();
+        Assert(restored.Arrangement == PanelArrangementMode.Shelf && restored.FreePlacements["example"] == layout.FreePlacements["example"]);
+        Assert(LayoutCodec.Decode("{\"Version\":2}").Arrangement == PanelArrangementMode.Free);
+        Throws(() => LayoutCodec.Decode("{\"Version\":2,\"FreePlacements\":null}"));
+    });
+    Test("Legacy layouts default to frequent sorting without inventing activity", () =>
+    {
+        var legacy = LayoutCodec.Decode("{\"Version\":2,\"Groups\":[{\"Tabs\":[{\"Items\":[]}]}]}");
+        Assert(legacy.Groups.Single().ItemSort == ItemSortOrder.FrequentFirst && legacy.ItemActivity.Count == 0);
+        Assert(ItemActivityTracking.Sort(legacy, ItemSortOrder.FrequentFirst, new[] { doc, link }.Select(FileCatalog.Entry))
+            .Select(e => e.Path).SequenceEqual(new[] { doc, link }));
+    });
+    Test("Frequency and arrival sorting are independent and preserve stored references", () =>
+    {
+        var layout = new Layout(); var now = DateTimeOffset.UtcNow;
+        layout.ItemActivity[doc] = new() { OpenCount = 8, AddedAtUtc = now.AddDays(-2) };
+        layout.ItemActivity[link] = new() { OpenCount = 1, AddedAtUtc = now };
+        layout.ItemActivity[image] = new() { OpenCount = 1, AddedAtUtc = now.AddDays(-1), LastOpenedAtUtc = now };
+        var entries = new[] { image, link, doc }.Select(FileCatalog.Entry).ToArray();
+        Assert(ItemActivityTracking.Sort(layout, ItemSortOrder.FrequentFirst, entries).Select(e => e.Path).SequenceEqual([doc, link, image]));
+        Assert(ItemActivityTracking.Sort(layout, ItemSortOrder.NewestFirst, entries).Select(e => e.Path).SequenceEqual([link, image, doc]));
+        Assert(ItemActivityTracking.Sort(layout, ItemSortOrder.Original, entries).SequenceEqual(entries));
+    });
+    Test("Inbox capture, classification and transfers preserve first arrival and usage", () =>
+    {
+        var layout = new Layout(); RecentItems.Capture(layout, [FileCatalog.Entry(doc)]);
+        var firstArrival = layout.ItemActivity[doc].AddedAtUtc;
+        Assert(firstArrival.HasValue && ItemActivityTracking.IsNew(layout, doc));
+        ItemActivityTracking.RecordOpened(layout, doc.ToUpperInvariant());
+        Assert(RecentItems.Organize(layout, layout.Groups.Single(g => g.IsRecent)) == 1);
+        var manual = new FenceGroup(); layout.Groups.Add(manual); DesktopAssignments.Collect(layout, manual.ActiveTab, [doc]);
+        Assert(layout.ItemActivity[doc].AddedAtUtc == firstArrival && layout.ItemActivity[doc].OpenCount == 1
+            && !ItemActivityTracking.IsNew(layout, doc));
+    });
+    Test("Opening legacy items records usage without marking them newly collected", () =>
+    {
+        var layout = new Layout(); ItemActivityTracking.RecordOpened(layout, link);
+        Assert(layout.ItemActivity[link].AddedAtUtc is null && layout.ItemActivity[link].LastOpenedAtUtc.HasValue
+            && !ItemActivityTracking.IsNew(layout, link));
+        layout.ItemActivity[link].OpenCount = int.MaxValue;
+        ItemActivityTracking.RecordOpened(layout, link);
+        Assert(layout.ItemActivity[link].OpenCount == int.MaxValue);
+    });
+    Test("Activity and per-group sorting round trip with case-insensitive identities", () =>
+    {
+        var layout = new Layout { Groups = [new() { ItemSort = ItemSortOrder.NewestFirst }] };
+        ItemActivityTracking.RecordAdded(layout, link); ItemActivityTracking.RecordOpened(layout, link);
+        var restored = LayoutCodec.Decode(LayoutCodec.Encode(layout));
+        Assert(restored.Groups.Single().ItemSort == ItemSortOrder.NewestFirst && restored.ItemActivity[link.ToUpperInvariant()].OpenCount == 1
+            && restored.ItemActivity[link].AddedAtUtc == layout.ItemActivity[link].AddedAtUtc);
+        layout.ItemActivity["relative.lnk"] = new(); layout.ItemActivity[link].OpenCount = -5;
+        layout.Groups[0].ItemSort = (ItemSortOrder)99;
+        restored = LayoutCodec.Decode(LayoutCodec.Encode(layout));
+        Assert(restored.ItemActivity.Count == 1 && restored.ItemActivity[link].OpenCount == 0
+            && restored.Groups[0].ItemSort == ItemSortOrder.FrequentFirst);
+    });
+    Test("Activity limits do not interrupt collection and malformed histories are rejected", () =>
+    {
+        var layout = new Layout();
+        for (var i = 0; i < ItemActivityTracking.MaximumEntries; i++) layout.ItemActivity[Path.Combine(source, $"historic-{i}.txt")] = new();
+        Assert(RecentItems.Capture(layout, [FileCatalog.Entry(doc)]) == 1 && layout.ItemActivity.Count == ItemActivityTracking.MaximumEntries);
+        layout.ItemActivity[doc] = new(); Throws(() => LayoutCodec.Decode(LayoutCodec.Encode(layout)));
+        Throws(() => LayoutCodec.Decode("{\"Version\":2,\"ItemActivity\":null}"));
+    });
     Test("Recent captures unassigned items once and respects explicit desktop returns", () =>
     {
         var group = new FenceGroup(); group.ActiveTab.Items.Add(link);
@@ -249,7 +355,7 @@ try
     Test("Geometry, opacity, and colors are normalized", () =>
     {
         var layout = LayoutCodec.Decode("{\"Groups\":[{\"Width\":-1,\"Height\":99999,\"Opacity\":0,\"Color\":\"bad\"}]}");
-        var g = layout.Groups[0]; Assert(g.Width == 260 && g.Height == 2000 && g.Opacity == 0.15 && g.Color == "#78B9A1");
+        var g = layout.Groups[0]; Assert(g.Width == 220 && g.Height == 2000 && g.Opacity == 0.15 && g.Color == "#78B9A1");
     });
     Test("Atomic saves keep a recoverable previous version", () =>
     {

@@ -14,6 +14,10 @@ public sealed class Layout
     public List<string> DesktopItems { get; set; } = [];
     public Dictionary<string, DesktopPosition> DesktopPositions { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<FenceGroup> Groups { get; set; } = [];
+    public Dictionary<string, ItemActivity> ItemActivity { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public PanelArrangementMode Arrangement { get; set; }
+    public bool AutoCollapseIdle { get; set; } = true;
+    public Dictionary<string, PanelBounds> FreePlacements { get; set; } = new(StringComparer.Ordinal);
 
     public Layout Clone() => LayoutCodec.Decode(LayoutCodec.Encode(this));
 
@@ -37,6 +41,7 @@ public sealed class UnsupportedLayoutVersionException(int version)
 public sealed class FenceGroup
 {
     public bool IsRecent { get; set; }
+    public ItemSortOrder ItemSort { get; set; } = ItemSortOrder.FrequentFirst;
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "新分组";
     public string Color { get; set; } = "#78B9A1";
@@ -84,6 +89,19 @@ public static class LayoutCodec
         if (layout.Version is < 1 or > Layout.CurrentVersion)
             throw new UnsupportedLayoutVersionException(layout.Version);
         layout.Version = Layout.CurrentVersion;
+        if (!Enum.IsDefined(layout.Arrangement)) layout.Arrangement = PanelArrangementMode.Free;
+        if (layout.FreePlacements is null || layout.FreePlacements.Count > 100)
+            throw new InvalidDataException("自由布局记录无效。");
+        layout.FreePlacements = layout.FreePlacements.Where(p => !string.IsNullOrWhiteSpace(p.Key) && p.Value is not null)
+            .ToDictionary(p => p.Key, p => new PanelBounds(Finite(p.Value.X, 120, -100000, 100000),
+                Finite(p.Value.Y, 100, -100000, 100000), Finite(p.Value.Width, 340, PanelArrangement.MinimumWidth, 2000),
+                Finite(p.Value.Height, 340, PanelArrangement.MinimumHeight, 2000), p.Value.Collapsed), StringComparer.Ordinal);
+        if (layout.ItemActivity is null || layout.ItemActivity.Count > ItemActivityTracking.MaximumEntries)
+            throw new InvalidDataException("项目使用记录无效或超过上限。");
+        layout.ItemActivity = layout.ItemActivity.Where(p => DesktopAssignments.NormalizeItem(p.Key) is not null && p.Value is not null)
+            .GroupBy(p => DesktopAssignments.NormalizeItem(p.Key)!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(p => p.Key, p => new ItemActivity { AddedAtUtc = p.Last().Value.AddedAtUtc,
+                LastOpenedAtUtc = p.Last().Value.LastOpenedAtUtc, OpenCount = Math.Max(0, p.Last().Value.OpenCount) }, StringComparer.OrdinalIgnoreCase);
         if (layout.DesktopItems is null || layout.DesktopItems.Count > 10000 || layout.DesktopPositions is null || layout.DesktopPositions.Count > 20000)
             throw new InvalidDataException("桌面项目或位置数据无效。");
         layout.DesktopItems = layout.DesktopItems.Select(DesktopAssignments.NormalizeItem).Where(p => p is not null)
@@ -100,11 +118,12 @@ public static class LayoutCodec
             if (group is null || string.IsNullOrWhiteSpace(group.Id) || !groupIds.Add(group.Id))
                 throw new InvalidDataException("分组标识无效或重复。");
             group.Name = CleanName(group.Name, "新分组");
+            if (!Enum.IsDefined(group.ItemSort)) group.ItemSort = ItemSortOrder.FrequentFirst;
             if (group.Color is null || !System.Text.RegularExpressions.Regex.IsMatch(group.Color, "^#[0-9a-fA-F]{6}$"))
                 group.Color = "#78B9A1";
             group.X = Finite(group.X, 120, -100000, 100000);
             group.Y = Finite(group.Y, 100, -100000, 100000);
-            group.Width = Finite(group.Width, 340, 260, 2000);
+            group.Width = Finite(group.Width, 340, PanelArrangement.MinimumWidth, 2000);
             group.Height = Finite(group.Height, 340, 180, 2000);
             group.Opacity = Finite(group.Opacity, 0.58, 0.15, 1);
             group.CollapsedOpacity = Finite(group.CollapsedOpacity, 0.20, 0.06, 0.65);

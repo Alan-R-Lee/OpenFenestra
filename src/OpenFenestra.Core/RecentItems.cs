@@ -27,6 +27,7 @@ public static class RecentItems
             if (path is null || !entry.Exists || known.Contains(path)) continue;
             if (tab.Items.Count + added.Count >= 10000) break;
             added.Add(path); known.Add(path);
+            ItemActivityTracking.RecordAdded(layout, path);
         }
         tab.Items.InsertRange(0, added);
         return added.Count;

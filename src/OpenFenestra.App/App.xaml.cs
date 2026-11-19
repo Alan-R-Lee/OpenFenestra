@@ -70,7 +70,7 @@ public partial class App : Application
             Workspace = new WorkspaceController(new LayoutStore(data));
             MainWindow = Workspace.Manager;
             Workspace.Start(!e.Args.Contains("--tray"), collapseOnStart: e.Args.Contains("--autostart"),
-                captureDesktop: !e.Args.Contains("--smoke-test") && !e.Args.Contains("--integration-test"));
+                captureDesktop: !e.Args.Contains("--smoke-test") && !e.Args.Contains("--integration-test") && !e.Args.Contains("--no-desktop-capture"));
             if (e.Args.Contains("--enable-startup")) Workspace.SetStartup(true);
             if (e.Args.Contains("--desktop-mode")) Workspace.SetDesktopIntegration(true);
             if (e.Args.Contains("--organize")) Workspace.OrganizeDesktop();

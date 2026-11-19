@@ -109,12 +109,16 @@
             <TextBlock Text="按你的习惯，调整桌面与启动方式。设置会自动保存。" Style="{StaticResource Caption}" Margin="0,10,0,24"/>
             <Border Background="#EDF0E9" CornerRadius="12" Padding="22,18" Margin="0,0,0,18"><StackPanel>
               <TextBlock Text="桌面与启动" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
-              <CheckBox x:Name="DesktopSetting" Content="原生桌面整合（实验）：收纳后不重复显示图标" Checked="OnDesktopSetting" Unchecked="OnDesktopSetting"/><TextBlock Text="保留 Windows 桌面；关闭此项或退出应用后恢复图标。" Foreground="#7E897F" FontSize="10" TextWrapping="Wrap" Margin="19,0,0,5"/><CheckBox x:Name="StartupSetting" Content="开机自动运行，并恢复上次布局" Checked="OnStartupSetting" Unchecked="OnStartupSetting"/><CheckBox x:Name="PinSetting" Content="分栏保持在桌面层并跨虚拟桌面显示" Checked="OnSettings" Unchecked="OnSettings"/><CheckBox x:Name="AutoSetting" Content="自动归类新增桌面项目" Checked="OnSettings" Unchecked="OnSettings"/>
+              <CheckBox x:Name="DesktopSetting" Content="原生桌面整合（实验）：收纳后不重复显示图标" Checked="OnDesktopSetting" Unchecked="OnDesktopSetting"/><TextBlock Text="保留 Windows 桌面；关闭此项或退出应用后恢复图标。" Foreground="#7E897F" FontSize="10" TextWrapping="Wrap" Margin="19,0,0,5"/><CheckBox x:Name="StartupSetting" Content="开机自动运行，并恢复上次布局" Checked="OnStartupSetting" Unchecked="OnStartupSetting"/><CheckBox x:Name="PinSetting" Content="分栏保持在桌面层并跨虚拟桌面显示" Checked="OnSettings" Unchecked="OnSettings"/><TextBlock Text="新桌面项目自动收纳至「最近」，点击一键归类后整理。" Style="{StaticResource Caption}" Margin="0,8,0,0"/>
             </StackPanel></Border>
             <Border Background="White" BorderBrush="#DEE4DA" BorderThickness="1" CornerRadius="12" Padding="22,18"><StackPanel>
-              <TextBlock Text="分栏操作" FontSize="16" FontWeight="SemiBold"/>
+              <TextBlock Text="分栏排布" FontSize="16" FontWeight="SemiBold"/>
+              <CheckBox x:Name="IdleCollapseSetting" Content="收起的分栏展开后，闲置 5 秒自动收起" Checked="OnIdleCollapseChanged" Unchecked="OnIdleCollapseChanged"/>
+              <ComboBox x:Name="ArrangementSetting" Margin="0,12,0,6" Padding="10,7" SelectionChanged="OnArrangementChanged"><ComboBoxItem Content="自由排布 · 独立位置与大小"/><ComboBoxItem Content="紧凑网格 · 统一小尺寸排列"/><ComboBoxItem Content="折叠栏架 · 标题集中，点击展开"/></ComboBox>
+              <TextBlock x:Name="ArrangementCapacity" Foreground="#536C52" Margin="0,3,0,4"/>
+              <TextBlock Text="自由布局单独保留，切回即可恢复。栏架一次展开一栏，标题列表支持滚动。每栏宽高可在编辑分组中精确调整，也可拖动右下角。" Style="{StaticResource Caption}" Margin="0,5,0,5"/>
               <TextBlock Text="整理位置会遵循“我的分组”中保存的顺序。" Style="{StaticResource Caption}" Margin="0,7,0,12"/>
-              <WrapPanel Margin="0,4,0,5"><Button Content="整理分栏位置" Click="OnArrange" Padding="10,6"/><Button Content="折叠全部" Click="OnCollapseAll" Padding="10,6"/><Button Content="展开全部" Click="OnExpandAll" Padding="10,6"/><Button Content="退出应用" Click="OnExitApp" Padding="10,6"/></WrapPanel>
+              <WrapPanel Margin="0,4,0,5"><Button Content="重新排列 / 刷新栏架" Click="OnArrange" Padding="10,6"/><Button Content="折叠全部" Click="OnCollapseAll" Padding="10,6"/><Button Content="展开全部" Click="OnExpandAll" Padding="10,6"/><Button Content="退出应用" Click="OnExitApp" Padding="10,6"/></WrapPanel>
             </StackPanel></Border>
           </StackPanel>
         </ScrollViewer>

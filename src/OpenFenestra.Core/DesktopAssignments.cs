@@ -35,6 +35,7 @@ public static class DesktopAssignments
             tab.Items.RemoveAll(moved.Contains);
         destination.Items.RemoveAll(moved.Contains);
         destination.Items.AddRange(items);
+        foreach (var path in items) ItemActivityTracking.RecordAdded(layout, path);
         layout.DesktopItems.RemoveAll(moved.Contains);
         return items.Count;
     }

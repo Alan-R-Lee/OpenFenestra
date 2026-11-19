@@ -6,6 +6,8 @@ using Forms = System.Windows.Forms;
 
 namespace OpenFenestra.App;
 
+internal sealed record OrganizationDestination(FenceGroup Group, FenceTab Tab, string[] Paths);
+
 internal sealed class WorkspaceController : IDisposable
 {
     internal Layout Layout { get; private set; }
@@ -25,6 +27,9 @@ internal sealed class WorkspaceController : IDisposable
     private bool _peeking;
     private bool _captureDesktop = true;
     private DateTime _nextRecentScan;
+    private string? _locatedPanelId;
+    private ShelfWindow? _shelf;
+    internal ShelfWindow? Shelf => _shelf;
     private readonly Dictionary<nint, string> _pinErrors = [];
     private readonly HashSet<nint> _pinnedPanels = [];
     private readonly DesktopIntegration _desktop;
@@ -66,9 +71,11 @@ internal sealed class WorkspaceController : IDisposable
         menu.Items.Add("打开管理窗口", null, (_, _) => ShowManager());
         menu.Items.Add("显示所有分组", null, (_, _) => ShowAll());
         menu.Items.Add("整理分栏位置", null, (_, _) => ArrangePanels());
+        menu.Items.Add("切换折叠栏架", null, (_, _) => SetArrangement(PanelArrangementMode.Shelf));
+        menu.Items.Add("恢复自由排布", null, (_, _) => SetArrangement(PanelArrangementMode.Free));
         menu.Items.Add("折叠所有分栏", null, (_, _) => CollapseAll(true));
         menu.Items.Add("展开所有分栏", null, (_, _) => CollapseAll(false));
-        menu.Items.Add("临时隐藏所有分组", null, (_, _) => { foreach (var p in Panels) p.Hide(); });
+        menu.Items.Add("临时隐藏所有分组", null, (_, _) => { foreach (var p in Panels) p.Hide(); _shelf?.Hide(); });
         menu.Items.Add("速览 / 取消置顶   Ctrl+Alt+Space", null, (_, _) => Peek());
         menu.Items.Add("恢复 Windows 原生桌面图标", null, (_, _) => SetDesktopIntegration(false));
         menu.Items.Add(new Forms.ToolStripSeparator());
@@ -122,11 +129,12 @@ internal sealed class WorkspaceController : IDisposable
         _peeking = !_peeking;
         foreach (var panel in Panels)
         {
-            if (!panel.Model.Visible) continue;
+            if (!panel.Model.Visible || (Layout.Arrangement == PanelArrangementMode.Shelf && panel.Model.Collapsed)) continue;
             panel.Topmost = _peeking;
             panel.Show();
             if (_peeking) panel.Activate();
         }
+        if (_shelf?.IsVisible == true) _shelf.Topmost = _peeking;
         Status = _peeking ? "速览已开启 · 再按 Ctrl+Alt+Space 取消置顶" : "速览已关闭";
         if (!_peeking) ApplyDesktopZOrder();
         Changed?.Invoke();
@@ -168,14 +176,44 @@ internal sealed class WorkspaceController : IDisposable
     {
         Layout.PinToDesktop = pin; Layout.AutoOrganize = auto;
         ConfigureAutoOrganize(); Notify("设置已保存");
-        if (auto) OrganizeDesktop();
     }
 
     internal void OrganizeRecent(FenceGroup recent)
     {
         Store.Snapshot(Layout);
+        var moved = recent.Tabs.Where(t => !t.IsPortal).SelectMany(t => t.Items).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var count = RecentItems.Organize(Layout, recent);
-        Notify($"已归类最近分栏中的 {count} 个项目 · 原文件位置保持不变");
+        moved.ExceptWith(recent.Tabs.SelectMany(t => t.Items));
+        var destinations = Layout.Groups.Where(g => !g.IsRecent)
+            .SelectMany(g => g.Tabs.Where(t => !t.IsPortal)
+                .Select(t => new OrganizationDestination(g, t, t.Items.Where(moved.Contains).ToArray())))
+            .Where(d => d.Paths.Length > 0).ToArray();
+        foreach (var destination in destinations)
+        {
+            destination.Group.Visible = true;
+            destination.Group.Collapsed = false;
+            destination.Group.SelectedTabId = destination.Tab.Id;
+        }
+        foreach (var panel in Panels) panel.ClearLocatedItems();
+        _locatedPanelId = destinations.FirstOrDefault()?.Group.Id;
+        Notify(count > 0 ? $"已归类最近分栏中的 {count} 个项目 · 点击最近分栏中的去向可再次定位" : "最近分栏中暂无可归类的项目");
+        foreach (var destination in destinations) _panels[destination.Group.Id].LocateItems(destination.Tab, destination.Paths);
+        if (_panels.TryGetValue(recent.Id, out var inbox)) inbox.ShowOrganizationResults(destinations);
+        if (destinations.Length > 0) _panels[destinations[0].Group.Id].Activate();
+    }
+
+    internal void LocateDestination(OrganizationDestination destination)
+    {
+        var group = Layout.Groups.FirstOrDefault(g => g.Id == destination.Group.Id);
+        var tab = group?.Tabs.FirstOrDefault(t => t.Id == destination.Tab.Id && !t.IsPortal);
+        var paths = tab is null ? [] : destination.Paths.Where(tab.Items.ToHashSet(StringComparer.OrdinalIgnoreCase).Contains).ToArray();
+        if (group is null || tab is null || paths.Length == 0)
+        { ReportStatus("这些项目的归属已变化，请查看当前分组。"); return; }
+        group.Visible = true; group.Collapsed = false; group.SelectedTabId = tab.Id;
+        _locatedPanelId = group.Id;
+        Notify($"已定位：{group.Name} / {tab.Name} · {paths.Length} 个项目");
+        _panels[group.Id].LocateItems(tab, paths);
+        _panels[group.Id].Activate();
     }
 
     private void RefreshRecent()
@@ -185,11 +223,17 @@ internal sealed class WorkspaceController : IDisposable
         _nextRecentScan = DateTime.UtcNow.AddSeconds(10);
         try
         {
-            var count = RecentItems.Capture(Layout, ShellFiles.DesktopItems());
-            if (count > 0 && Layout.AutoOrganize) { OrganizeDesktop(); return; }
-            if (count > 0) Notify($"最近分栏新增 {count} 个桌面项目");
+            CaptureRecent(ShellFiles.DesktopItemsForCapture());
         }
         catch (Exception error) { Report(error); }
+    }
+
+    internal int CaptureRecent(IEnumerable<DesktopEntry> entries)
+    {
+        var count = RecentItems.Capture(Layout, entries);
+        // Old AutoOrganize preferences must not drain the inbox or spawn category panels.
+        if (count > 0) Notify($"最近分栏新增 {count} 个桌面项目");
+        return count;
     }
 
     internal void SetDesktopIntegration(bool enabled)
@@ -232,7 +276,9 @@ internal sealed class WorkspaceController : IDisposable
     private void ApplyDesktopZOrderCore()
     {
         if (!Layout.PinToDesktop && !_desktop.Enabled && _pinnedPanels.Count == 0) return;
-        var windows = _panels.Values.Where(p => p.IsVisible && !p.Topmost).Cast<Window>().ToArray();
+        var windows = _panels.Values.Where(p => p.IsVisible && !p.Topmost)
+            .OrderByDescending(p => p.Model.Id == _locatedPanelId).Cast<Window>()
+            .Concat(_shelf is { IsVisible: true, Topmost: false } ? new Window[] { _shelf } : []).ToArray();
         if (Layout.PinToDesktop || _desktop.Enabled) NativeDesktop.AnchorWindows(windows);
         var pinsChanged = false;
         foreach (var panel in windows)
@@ -254,6 +300,21 @@ internal sealed class WorkspaceController : IDisposable
     {
         var count = DesktopAssignments.Collect(Layout, tab, paths);
         Notify($"已收纳 {count} 个图标 · 原文件位置保持不变");
+    }
+    internal void OpenItem(string path)
+    {
+        ShellFiles.Open(path);
+        RecordItemOpened(path);
+    }
+    internal void RecordItemOpened(string path)
+    {
+        ItemActivityTracking.RecordOpened(Layout, path);
+        ScheduleSave();
+        // Defer reordering until the input/menu handler has returned.
+        Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+        {
+            if (!_disposed) foreach (var panel in Panels) panel.RefreshItemActivity(path);
+        }));
     }
     internal void ReturnToDesktop(IEnumerable<string> paths, DesktopPosition position)
     {
@@ -340,22 +401,54 @@ internal sealed class WorkspaceController : IDisposable
 
     internal void ArrangePanels()
     {
+        if (Layout.Arrangement == PanelArrangementMode.Shelf) { Notify("已刷新折叠栏架"); return; }
+        SetArrangement(PanelArrangementMode.CompactGrid);
+    }
+
+    internal void SetArrangement(PanelArrangementMode mode)
+    {
+        if (mode == PanelArrangementMode.Free && Layout.Arrangement == PanelArrangementMode.Free) return;
+        var groups = Layout.Groups.Where(g => g.Visible).ToArray();
+        if (mode != PanelArrangementMode.Free && groups.Any(g => g.Locked))
+        { ReportStatus("请先解锁需要重新排布的分栏，再切换排列方式。"); return; }
+        var area = SystemParameters.WorkArea;
+        var plan = PanelArrangement.Grid(groups.Length, new(area.X, area.Y, area.Width, area.Height));
+        if (mode == PanelArrangementMode.CompactGrid && groups.Length > plan.Capacity)
+        { ReportStatus($"当前屏幕紧凑网格最多容纳 {plan.Capacity} 个可见分栏，可选择支持滚动的折叠栏架。"); return; }
         Store.Snapshot(Layout);
-        var area = Forms.Screen.PrimaryScreen!.WorkingArea;
-        var dpi = VisualTreeHelper.GetDpi(Manager);
-        var width = area.Width / dpi.DpiScaleX; var height = area.Height / dpi.DpiScaleY;
-        var columns = Math.Clamp((int)((width - 32) / 310), 1, Math.Max(1, Math.Min(4, Layout.Groups.Count)));
-        var rows = Math.Max(1, (int)Math.Ceiling((double)Layout.Groups.Count / columns));
-        var panelWidth = Math.Clamp((width - (columns + 1) * 16) / columns, 260, 420);
-        var panelHeight = Math.Clamp((height - 56 - (rows + 1) * 16) / rows, 180, 420);
-        for (var index = 0; index < Layout.Groups.Count; index++)
+        if (Layout.Arrangement == PanelArrangementMode.Free && mode != PanelArrangementMode.Free)
+            Layout.FreePlacements = Layout.Groups.ToDictionary(g => g.Id, g => new PanelBounds(g.X, g.Y, g.Width, g.Height, g.Collapsed), StringComparer.Ordinal);
+        Layout.Arrangement = mode;
+        if (mode == PanelArrangementMode.Free)
         {
-            var group = Layout.Groups[index];
-            group.X = area.Left / dpi.DpiScaleX + 16 + index % columns * (panelWidth + 16);
-            group.Y = area.Top / dpi.DpiScaleY + 32 + index / columns * (panelHeight + 16);
-            group.Width = panelWidth; group.Height = panelHeight; group.Visible = true;
+            foreach (var group in Layout.Groups)
+                if (Layout.FreePlacements.TryGetValue(group.Id, out var saved))
+                { group.X = saved.X; group.Y = saved.Y; group.Width = saved.Width; group.Height = saved.Height; group.Collapsed = saved.Collapsed; }
         }
-        Notify("已按屏幕可用空间排列分栏，原分类和标签页保留");
+        else if (mode == PanelArrangementMode.Shelf)
+            foreach (var group in groups) group.Collapsed = true;
+        else
+            for (var i = 0; i < groups.Length; i++)
+            { var cell = plan.Cells[i]; groups[i].X = cell.X; groups[i].Y = cell.Y; groups[i].Width = cell.Width; groups[i].Height = cell.Height; }
+        Notify(mode switch { PanelArrangementMode.Shelf => "折叠栏架已开启：点击标题展开，切换分栏时自动收起上一栏", PanelArrangementMode.CompactGrid => "紧凑网格已排列；自由布局已单独保留", _ => "已恢复自由排布的位置、大小与折叠状态" });
+    }
+
+    internal PanelBounds PanelGeometry(FenceGroup group)
+    {
+        if (Layout.Arrangement != PanelArrangementMode.Shelf || _shelf is null) return new(group.X, group.Y, group.Width, group.Height);
+        var area = SystemParameters.WorkArea;
+        return PanelArrangement.ShelfPopup(new(area.X, area.Y, area.Width, area.Height), _shelf.Bounds, group);
+    }
+
+    internal void ToggleShelfGroup(string id)
+    {
+        var selected = Layout.Groups.FirstOrDefault(g => g.Id == id && g.Visible);
+        if (selected is null) return;
+        var expand = selected.Collapsed;
+        foreach (var group in Layout.Groups) group.Collapsed = group != selected || !expand;
+        _locatedPanelId = expand ? selected.Id : null;
+        Notify(expand ? "已展开「" + selected.Name + "」" : "已收起分栏");
+        if (expand) _panels[selected.Id].Activate();
     }
 
     internal void ReportStatus(string status) { Status = status; Changed?.Invoke(); }
@@ -418,6 +511,7 @@ internal sealed class WorkspaceController : IDisposable
                 var runtime = new { processId = Environment.ProcessId, packageIdentity = RuntimePaths.PackageIdentity,
                     executable = Environment.ProcessPath, nativeEnabled = _desktop.Enabled,
                     hiddenCount = _desktop.HiddenCount, nativeCapabilities = _desktop.Capabilities,
+                    arrangement = Layout.Arrangement.ToString(), shelfVisible = _shelf?.IsVisible == true,
                     visiblePanels = Panels.Count(p => p.IsVisible),
                     collapsedPanels = Panels.Count(p => p.IsVisible && p.Model.Collapsed),
                     desktopOwnedPanels = Panels.Count(p => NativeDesktop.IsDesktopOwned(p)),
@@ -435,6 +529,16 @@ internal sealed class WorkspaceController : IDisposable
 
     private void SyncPanels()
     {
+        if (Layout.Arrangement == PanelArrangementMode.Shelf)
+        {
+            _shelf ??= new ShelfWindow(this);
+            var expanded = Layout.Groups.Where(g => g.Visible && !g.Collapsed).ToArray();
+            var active = expanded.FirstOrDefault(g => g.Id == _locatedPanelId) ?? expanded.FirstOrDefault();
+            foreach (var group in expanded) if (group != active) group.Collapsed = true;
+            _shelf.Topmost = _peeking;
+            _shelf.Refresh(); if (!_shelf.IsVisible) _shelf.Show();
+        }
+        else _shelf?.Hide();
         var groupIds = Layout.Groups.Select(g => g.Id).ToHashSet(StringComparer.Ordinal);
         foreach (var obsolete in _panels.Keys.Where(k => !groupIds.Contains(k)).ToArray())
         {
@@ -447,7 +551,8 @@ internal sealed class WorkspaceController : IDisposable
             if (!_panels.TryGetValue(group.Id, out var panel))
             { panel = new FenceWindow(this, group); _panels.Add(group.Id, panel); }
             panel.Refresh();
-            if (group.Visible) { if (!panel.IsVisible) panel.Show(); } else panel.Hide();
+            if (group.Visible && (Layout.Arrangement != PanelArrangementMode.Shelf || !group.Collapsed))
+            { if (!panel.IsVisible) panel.Show(); } else panel.Hide();
         }
     }
 
@@ -456,6 +561,7 @@ internal sealed class WorkspaceController : IDisposable
         var next = LayoutStore.Read(path);
         Store.Snapshot(Layout);
         foreach (var panel in Panels.ToArray()) panel.DisposePanel();
+        _shelf?.DisposeShelf(); _shelf = null;
         _panels.Clear(); _pinnedPanels.Clear(); _pinErrors.Clear(); Layout = next;
         if (_captureDesktop) RecentItems.Ensure(Layout);
         ConfigureAutoOrganize(); ConfigureDesktopIntegration(); Notify("布局已恢复 · 恢复前的布局已自动保存为快照");
@@ -477,6 +583,7 @@ internal sealed class WorkspaceController : IDisposable
         foreach (var watcher in _desktopWatchers) watcher.Dispose();
         if (_source is not null) { NativeDesktop.UnregisterHotKey(_source.Handle, 7); _source.RemoveHook(WndProc); }
         foreach (var panel in Panels.ToArray()) panel.DisposePanel();
+        _shelf?.DisposeShelf();
         var icon = _tray?.Icon;
         _tray?.Dispose();
         if (icon is not null && icon != System.Drawing.SystemIcons.Application) icon.Dispose();
