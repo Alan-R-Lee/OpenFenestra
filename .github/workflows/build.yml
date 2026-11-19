@@ -10,6 +10,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -35,8 +36,19 @@ jobs:
         shell: pwsh
         run: ./scripts/build-installer.ps1 -SkipPortableBuild
       - name: Verify install and uninstall
+        timeout-minutes: 3
         shell: pwsh
         run: ./scripts/test-installer.ps1
+      - name: Upload installer failure logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer-diagnostics
+          path: |
+            .qa/installer-*/*-install.log
+            .qa/installer-*/*-uninstall.log
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v7
         with:
           name: OpenFenestra-win-x64
