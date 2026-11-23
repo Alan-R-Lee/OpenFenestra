@@ -9,9 +9,9 @@ A Windows 11 desktop organizer with native Explorer integration, tabs and collap
 [![Build](https://github.com/Alan-R-Lee/OpenFenestra/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/Alan-R-Lee/OpenFenestra/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**当前源码版本：v1.1.0 · Windows 11 x64**
+**当前版本：v1.1.0 · Windows 11 x64**
 
-v1.1.0 完善“最近”收纳与归类定位，提供原生图标右键菜单、常用排序和新增标记，并加入独立尺寸、紧凑网格、折叠栏架及五秒闲置收起。[查看版本说明](docs/releases/v1.1.0.md)。当前处于发布准备阶段，已发布安装包仍为 v1.0.0。
+v1.1.0 完善“最近”收纳与归类定位，提供原生图标右键菜单、常用排序和新增标记，并加入独立尺寸、紧凑网格、折叠栏架及五秒闲置收起。分栏与栏架采用统一的半透明圆角细滚动条。[查看版本说明](docs/releases/v1.1.0.md)。
 
 ## 可以做什么
 
@@ -35,17 +35,17 @@ v1.1.0 完善“最近”收纳与归类定位，提供原生图标右键菜单�
 
 ## 开始使用
 
-已发布安装包仍为 v1.0.0，从 [v1.0.0 Releases](https://github.com/Alan-R-Lee/OpenFenestra/releases/tag/v1.0.0) 下载安装包：
+从 [v1.1.0 Releases](https://github.com/Alan-R-Lee/OpenFenestra/releases/tag/v1.1.0) 下载安装包：
 
 | 下载 | 约大小 | 适用情况 |
 | --- | ---: | --- |
-| [Light 轻量安装版](https://github.com/Alan-R-Lee/OpenFenestra/releases/download/v1.0.0/OpenFenestra-1.0.0-Setup-Light-x64.exe) | 3 MB | 已有 .NET 10 x64 桌面运行时；缺少时向导提供 Microsoft 下载入口 |
-| [Offline 离线安装版](https://github.com/Alan-R-Lee/OpenFenestra/releases/download/v1.0.0/OpenFenestra-1.0.0-Setup-Offline-x64.exe) | 50 MB | 首次使用推荐，自带运行时，无需额外下载 |
-| [便携 ZIP](https://github.com/Alan-R-Lee/OpenFenestra/releases/download/v1.0.0/OpenFenestra-win-x64.zip) | 70 MB | 完整解压后直接运行，可使用 `--portable` |
+| [Light 轻量安装版](https://github.com/Alan-R-Lee/OpenFenestra/releases/download/v1.1.0/OpenFenestra-1.1.0-Setup-Light-x64.exe) | 3 MB | 已有 .NET 10 x64 桌面运行时；缺少时向导提供 Microsoft 下载入口 |
+| [Offline 离线安装版](https://github.com/Alan-R-Lee/OpenFenestra/releases/download/v1.1.0/OpenFenestra-1.1.0-Setup-Offline-x64.exe) | 50 MB | 首次使用推荐，自带运行时，无需额外下载 |
+| [便携 ZIP](https://github.com/Alan-R-Lee/OpenFenestra/releases/download/v1.1.0/OpenFenestra-win-x64.zip) | 70 MB | 完整解压后直接运行，可使用 `--portable` |
 
 安装向导支持简体中文和英文、安装位置、开始菜单、可选桌面快捷方式与登录启动。应用按当前用户安装；卸载保留配置和原文件。首次启动后，在左侧“设置”中按需开启原生桌面整合并选择分栏排布。v1.1.0 的新桌面项目自动进入“最近”，点击一键归类后可查看去向。
 
-[SHA-256 校验文件](https://github.com/Alan-R-Lee/OpenFenestra/releases/download/v1.0.0/SHA256SUMS.txt) 随版本提供。EXE 尚未代码签名，请核对仓库来源和校验值。源码下载包不是可直接运行的程序。
+[SHA-256 校验文件](https://github.com/Alan-R-Lee/OpenFenestra/releases/download/v1.1.0/SHA256SUMS.txt) 随版本提供。EXE 尚未代码签名，请核对仓库来源和校验值。源码下载包不是可直接运行的程序。
 
 便携包请保留 EXE 旁的 DLL、`licenses` 和 `docs`。持续集成的开发构建也可从 [Actions](https://github.com/Alan-R-Lee/OpenFenestra/actions/workflows/build.yml) 获取。
 

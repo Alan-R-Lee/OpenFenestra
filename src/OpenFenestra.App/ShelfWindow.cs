@@ -18,6 +18,7 @@ internal sealed class ShelfWindow : Window
         Style = (Style)Application.Current.FindResource(typeof(Window));
         WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
         AllowsTransparency = true; Background = Brushes.Transparent;
+        Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/OpenFenestra;component/DesktopScrollBars.xaml", UriKind.Relative) });
         ShowInTaskbar = App.DebugWindows; ShowActivated = false; Width = 220;
         var root = new DockPanel { Margin = new Thickness(7) };
         var header = new DockPanel { Margin = new Thickness(5, 3, 2, 8) };
