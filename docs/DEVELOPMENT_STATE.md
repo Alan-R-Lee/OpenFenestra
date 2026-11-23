@@ -6,7 +6,7 @@
 
 - 项目：OpenFenestra，独立实现、MIT，保留 Explorer 原生桌面；目标 Windows 11 x64，WPF / .NET 10 + x64 C++ ShellBridge。
 - 远程：`https://github.com/Alan-R-Lee/OpenFenestra.git`。2026-11-19 通过 GitHub 接口核实为公开仓库；本轮未更改可见性。
-- 当前源码与本机运行版本均为 `v1.1.0`，本机包含本轮滚动条样式。[PR #2](https://github.com/Alan-R-Lee/OpenFenestra/pull/2) 已完成审阅并合并至 `main`；本轮美化通过 `codex/desktop-scrollbar-release` 准备同步 `main` 并正式发布 v1.1.0。此前已发布版本为 v1.0.0。
+- 当前源码、本机运行版本和最新正式版均为 `v1.1.0`，包含本轮滚动条样式。[PR #2](https://github.com/Alan-R-Lee/OpenFenestra/pull/2) 已完成审阅并合并至 `main`；本轮美化通过 `codex/desktop-scrollbar-release` 同步到 `main`，发布提交为 `a38d211`。[v1.1.0 Release](https://github.com/Alan-R-Lee/OpenFenestra/releases/tag/v1.1.0) 已发布并标记为最新版本。
 - 产品迭代从 `8872031` 开始，经 `codex/desktop-workflow-iteration` 提交并合并。版本更新分支为 `codex/version-1.1.0`，基于 `main` 的合并提交 `1bdc40d`，同步目标为 `main`。
 - 2026-11-03 已将 17 条历史提交的个人邮箱改为 GitHub 隐私邮箱，并同步两个远程分支和 `v1.0.0` 标签。源码树和已发布资产未改变；原始历史只在本机忽略的 `.qa` 私有备份中。避免使用旧克隆重新带回原历史。
 
@@ -32,6 +32,7 @@
 - 用户已在本机试用并确认美化效果，授权提交、推送和发布。发布使用现有待发布版本 v1.1.0，同步 README 下载入口及版本说明；本轮未修改 Core、原生 DLL 或协议。完整交互和混合 DPI 仍需扩大验收。
 - 本地 MSVC 构建遇到中文路径编码问题，本轮使用既有 MinGW 工具链验证；119 项原生隔离断言通过，未接入 Explorer。GitHub CI 使用 MSVC 和 ASCII 工作目录。发布验证日志保存在忽略目录 `.qa/scrollbar-20261123/release-*.log`。
 - 发布前重新通过 56 项 Core、22 项 Shell 数据、68 项 WPF 冒烟，Release 构建零警告 / 零错误。便携包 48 个条目及校验和检查通过；Light、Offline 安装器版本与载荷均为 1.1.0，两种安装 / 启动 / 卸载 / 注册清理 / 用户数据保留检查通过。日常实例继续运行，未重新部署或改变配置；正式资产由 v1.1.0 标签工作流构建并发布。
+- `a38d211` 及 `v1.1.0` 标签已推送；[发布流水线 #41](https://github.com/Alan-R-Lee/OpenFenestra/actions/runs/45102953969) 与 [main 构建 #42](https://github.com/Alan-R-Lee/OpenFenestra/actions/runs/45102954014) 全部通过。正式版已上传 Light、Offline、便携 ZIP、ZIP 校验文件与 SHA256SUMS 共 5 个资产；下载校验文件后，已核对其中 SHA-256 与 GitHub 资产摘要一致。CI 使用 MSVC，资产哈希与本机 MinGW 构建不同属正常；此次未重写历史或更改仓库可见性。
 
 ## 2026-11-19 安装器 CI 等待与诊断
 
